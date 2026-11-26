@@ -10,7 +10,7 @@ export default defineConfig({
       transformIndexHtml: (html) =>
         html
           .replaceAll('__APP_TITLE__', ar.app)
-          .replaceAll('__APP_DESCRIPTION__', ar.description),
+          .replaceAll('__APP_DESCRIPTION__', ar.appDescription),
     },
     react(),
     VitePWA({

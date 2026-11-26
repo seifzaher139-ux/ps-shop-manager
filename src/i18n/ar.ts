@@ -1,7 +1,7 @@
 import type { Permission, Settings } from '../core/model';
 export const ar = {
   app: 'إدارة البلايستيشن',
-  description: 'إدارة محل البلايستيشن بدون إنترنت',
+  appDescription: 'إدارة محل البلايستيشن بدون إنترنت',
   manifestName: 'إدارة محل البلايستيشن',
   manifestShort: 'البلايستيشن',
   tagline: 'كل روم، كل دقيقة، كل جنيه.',
