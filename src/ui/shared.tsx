@@ -44,7 +44,7 @@ export function Field({
       {Children.map(children, (child) =>
         isValidElement(child) &&
         (typeof child.type !== 'string' ||
-        ['input', 'select', 'textarea'].includes(child.type))
+          ['input', 'select', 'textarea'].includes(child.type))
           ? cloneElement(child as ReactElement<{ id: string }>, { id })
           : child,
       )}
@@ -131,4 +131,28 @@ export function toLocalInput(ms: number) {
     .slice(0, 16);
 }
 
-export function Gamepad(){return <svg className="gamepad" viewBox="0 0 120 70" fill="none" aria-hidden="true"><path d="M31 12h58c10 0 15 8 18 19l8 25c3 12-7 16-14 9L84 49H36L19 65C12 72 2 68 5 56l8-25c3-11 8-19 18-19Z" stroke="currentColor" strokeWidth="4"/><path d="M32 24v22M21 35h22" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/><circle cx="84" cy="29" r="4" fill="currentColor"/><circle cx="96" cy="41" r="4" fill="currentColor"/><path d="m48 12 6-7h12l6 7" stroke="currentColor" strokeWidth="4"/></svg>;}
+export function Gamepad() {
+  return (
+    <svg
+      className="gamepad"
+      viewBox="0 0 120 70"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M31 12h58c10 0 15 8 18 19l8 25c3 12-7 16-14 9L84 49H36L19 65C12 72 2 68 5 56l8-25c3-11 8-19 18-19Z"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        d="M32 24v22M21 35h22"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      <circle cx="84" cy="29" r="4" fill="currentColor" />
+      <circle cx="96" cy="41" r="4" fill="currentColor" />
+      <path d="m48 12 6-7h12l6 7" stroke="currentColor" strokeWidth="4" />
+    </svg>
+  );
+}

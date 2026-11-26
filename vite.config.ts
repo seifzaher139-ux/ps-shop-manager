@@ -1,16 +1,24 @@
+import { ar } from './src/i18n/ar';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   base: './',
   plugins: [
+    {
+      name: 'localize-html',
+      transformIndexHtml: (html) =>
+        html
+          .replaceAll('__APP_TITLE__', ar.app)
+          .replaceAll('__APP_DESCRIPTION__', ar.description),
+    },
     react(),
     VitePWA({
       registerType: 'prompt',
       includeAssets: ['icons/*.png', 'fonts/*'],
       manifest: {
-        name: 'إدارة محل البلايستيشن',
-        short_name: 'البلايستيشن',
+        name: ar.manifestName,
+        short_name: ar.manifestShort,
         lang: 'ar',
         dir: 'rtl',
         display: 'standalone',

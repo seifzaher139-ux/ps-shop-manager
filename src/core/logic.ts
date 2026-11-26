@@ -1,3 +1,4 @@
+import { ROUNDING_THRESHOLDS } from './model';
 import { seedText } from '../i18n/ar';
 import {
   type Bill,
@@ -27,12 +28,15 @@ export function parseMoney(value: string): number {
   return integer(Number(whole) * 100 + Number(fraction.padEnd(2, '0')));
 }
 export function ceilDiv(value: number, divisor: number): number {
-  return Math.floor((integer(value) + divisor - 1) / divisor);
+  integer(value);
+  integer(divisor);
+  if (!divisor) throw new Error('invalid-number');
+  return Math.floor(value / divisor) + (value % divisor ? 1 : 0);
 }
 export function billedMinutes(
   minutes: number,
   enabled = true,
-  thresholds = { half: 35, quarter: 45 },
+  thresholds: { half: number; quarter: number } = ROUNDING_THRESHOLDS,
 ): number {
   integer(minutes);
   if (!enabled) return minutes;
@@ -155,7 +159,7 @@ export function buildReport(
   const sessions = state.sessions.filter((s) => shiftIds.includes(s.shiftId));
   const expenses = state.expenses.filter((e) => shiftIds.includes(e.shiftId));
   return {
-    rooms:structuredClone(state.rooms),
+    rooms: structuredClone(state.rooms),
     title,
     period,
     generatedAt: now,

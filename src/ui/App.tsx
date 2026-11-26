@@ -11,8 +11,11 @@ import { Settings } from './Settings';
 export function App() {
   const { data, ready, userId, message } = useStore();
   const [fatal, setFatal] = useState(false);
-  const [cached,setCached]=useState(false);
-  useEffect(()=>{if('serviceWorker' in navigator)void navigator.serviceWorker.ready.then(()=>setCached(true));},[]);
+  const [cached, setCached] = useState(false);
+  useEffect(() => {
+    if ('serviceWorker' in navigator)
+      void navigator.serviceWorker.ready.then(() => setCached(true));
+  }, []);
   const [online, setOnline] = useState(navigator.onLine);
   const {
     offlineReady: [offlineReady],
@@ -27,9 +30,17 @@ export function App() {
   }, []);
   useEffect(() => {
     const handler = () => setOnline(navigator.onLine);
+    const refresh = () => {
+      void useStore
+        .getState()
+        .load()
+        .catch(() => useStore.getState().notify(ar.error));
+    };
+    window.addEventListener('focus', refresh);
     window.addEventListener('online', handler);
     window.addEventListener('offline', handler);
     return () => {
+      window.removeEventListener('focus', refresh);
       window.removeEventListener('online', handler);
       window.removeEventListener('offline', handler);
     };
@@ -103,7 +114,7 @@ export function App() {
               <span>{data.settings.shopName}</span>
               <div className="connection">
                 <span className="status-dot" />
-                {(offlineReady||cached)
+                {offlineReady || cached
                   ? ar.offlineReady
                   : online
                     ? ar.online

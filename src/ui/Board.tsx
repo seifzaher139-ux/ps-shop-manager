@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { can, calculate, totals, parseMoney } from '../core/logic';
 import type { Room, Session, Discount } from '../core/model';
+import { clock } from '../services/platform';
 import { commands, currentUser, useStore } from '../services/store';
 import { ar, dayKey, duration, money } from '../i18n/ar';
-import { AsyncButton, Field, Modal, toLocalInput, useNow, Gamepad } from './shared';
+import {
+  AsyncButton,
+  Field,
+  Modal,
+  toLocalInput,
+  useNow,
+  Gamepad,
+} from './shared';
 import { SessionReceipt } from './Reports';
 export function Board() {
   const { data } = useStore();
@@ -14,7 +22,6 @@ export function Board() {
   const [open, setOpen] = useState(false);
   const [close, setClose] = useState(false);
   const [note, setNote] = useState('');
-  const [remind, setRemind] = useState(false);
   const [receipt, setReceipt] = useState<Session>();
   const running = data.sessions.filter((s) => s.status === 'running');
   const todayShifts = data.shifts
@@ -96,7 +103,9 @@ export function Board() {
                   </span>
                   <span className="badge">{session ? ar.busy : ar.free}</span>
                 </div>
-                <span className="controller"><Gamepad/></span>
+                <span className="controller">
+                  <Gamepad />
+                </span>
                 <h2>
                   <bdi>{room.name}</bdi>
                 </h2>
@@ -194,7 +203,6 @@ export function Board() {
                     dayKey(now, state.settings.timezone)
                   ) {
                     await commands.reminder();
-                    setRemind(true);
                   }
                   window.location.hash = `/reports?closing=1${state.settings.lastReminder !== dayKey(now, state.settings.timezone) ? '&reminder=1' : ''}`;
                 }}
@@ -203,19 +211,6 @@ export function Board() {
               </AsyncButton>
             </>
           )}
-        </Modal>
-      )}
-      {remind && (
-        <Modal title={ar.backupReminder} onClose={() => setRemind(false)}>
-          <p>{ar.backupHint}</p>
-          <button
-            onClick={() => {
-              setRemind(false);
-              window.location.hash = '/settings';
-            }}
-          >
-            {ar.backup}
-          </button>
         </Modal>
       )}
     </>
@@ -238,9 +233,8 @@ function SessionDialog({
   );
   const shift = data.shifts.find((s) => !s.end);
   const [mode, setMode] = useState<Session['mode']>('single');
-  const [start, setStart] = useState(
-    toLocalInput(Math.max(now, shift?.start ?? now)),
-  );
+  const [initialStart] = useState(toLocalInput(now));
+  const [start, setStart] = useState(initialStart);
   const [note, setNote] = useState('');
   const [service, setService] = useState(
     data.settings.services.find((s) => s.active)?.id ?? '',
@@ -316,7 +310,9 @@ function SessionDialog({
               await commands.start(
                 room.id,
                 mode,
-                Math.max(new Date(start).getTime(), shift!.start),
+                start === initialStart
+                  ? clock.now()
+                  : new Date(start).getTime(),
                 note,
               );
               onClose();

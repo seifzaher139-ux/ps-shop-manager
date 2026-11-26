@@ -1,4 +1,5 @@
 import { seedText } from '../i18n/ar';
+export const ROUNDING_THRESHOLDS = { half: 35, quarter: 45 } as const;
 export const permissions = [
   'startSession',
   'endSession',
@@ -150,7 +151,7 @@ export interface State {
   audit: Audit[];
 }
 export interface Report {
-  rooms:Room[];
+  rooms: Room[];
   title: string;
   period: string;
   generatedAt: number;
@@ -173,7 +174,7 @@ export function defaults(): State {
       timezone: 'Africa/Cairo',
       roundTime: true,
       priceRound: 'pound',
-      thresholds: { half: 35, quarter: 45 },
+      thresholds: { ...ROUNDING_THRESHOLDS },
       idleMinutes: 0,
       indic: false,
       types: [

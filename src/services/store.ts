@@ -48,19 +48,34 @@ export const useStore = create<Store>((set, get) => ({
   notify: (message) => set({ message }),
   async load() {
     const data = await repository.load();
-    set({ data, ready: true });
+    const prior = get();
+    const old = prior.data.users.find((u) => u.id === prior.userId);
+    const next = data.users.find((u) => u.id === prior.userId && u.active);
+    set({
+      data,
+      ready: true,
+      userId:
+        prior.userId && next && old?.password === next.password
+          ? prior.userId
+          : null,
+    });
   },
   logout() {
     set({ userId: null });
   },
   async login(username, password) {
-    const user = get().data.users.find(
-      (u) => u.username === username && u.active,
-    );
+    const latest = await repository.load();
+    set({ data: latest });
+    const user = latest.users.find((u) => u.username === username && u.active);
     if (!user || !(await verifySecret(password, user.password)))
       throw new Error('auth');
     set({ userId: user.id });
-    await get().mutate('self', 'login', username, () => {});
+    try {
+      await get().mutate('self', 'login', username, () => {});
+    } catch (error) {
+      set({ userId: null });
+      throw error;
+    }
   },
   async setup(username, password) {
     if (get().data.users.length) throw new Error('denied');
@@ -87,7 +102,10 @@ export const useStore = create<Store>((set, get) => ({
       action: 'setup',
       detail: username,
     });
-    await repository.save(data);
+    await repository.update((existing) => {
+      if (existing.users.length) throw new Error('denied');
+      Object.assign(existing, data);
+    });
     set({ data, userId: null });
     return code;
   },
@@ -110,6 +128,7 @@ export const useStore = create<Store>((set, get) => ({
         const actor = draft.users.find((u) => u.id === user.id && u.active);
         if (
           !actor ||
+          actor.password !== user.password ||
           (permission === 'admin'
             ? !actor.admin
             : permission === 'self'
@@ -184,6 +203,7 @@ export const commands = {
         )
       )
         throw new Error('running-sessions');
+      if (clock.now() < shift.start) throw new Error('clock-backwards');
       shift.end = clock.now();
       shift.closedBy = user.id;
       shift.frozen = buildReport(
@@ -203,7 +223,8 @@ export const commands = {
   ) {
     await mutate('startSession', 'start', roomId, (data, user) => {
       const shift = openShift(data);
-      if (start > clock.now() || start < shift.start) throw new Error('future');
+      if (!Number.isFinite(start) || start > clock.now() || start < shift.start)
+        throw new Error('future');
       if (
         data.sessions.some((s) => s.roomId === roomId && s.status === 'running')
       )
@@ -297,6 +318,7 @@ export const commands = {
   async cancel(id: string, reason: string) {
     await mutate('cancelSession', 'cancel', reason, (data, user) => {
       const s = running(data, id);
+      if (clock.now() < s.start) throw new Error('clock-backwards');
       s.status = 'cancelled';
       s.end = clock.now();
       s.reason = reason;
@@ -348,7 +370,12 @@ export const commands = {
             (e) => e.id === id && e.shiftId === shift.id && !e.voided,
           );
           if (!existing) throw new Error('closed-shift');
-          Object.assign(existing, expense, { voided });
+          Object.assign(existing, {
+            description: expense.description,
+            amount: expense.amount,
+            category: expense.category,
+            voided,
+          });
         } else
           data.expenses.push({
             ...expense,
@@ -435,8 +462,8 @@ export const commands = {
   },
   async recover(username: string, code: string, password: string) {
     checkCredentials(username, password);
-    const data = structuredClone(useStore.getState().data);
-    const user = data.users.find(
+    const latest = await repository.load();
+    const user = latest.users.find(
       (u) => u.admin && u.active && u.username === username,
     );
     if (
@@ -444,15 +471,21 @@ export const commands = {
       !(await verifySecret(code.trim().toUpperCase(), user.recovery))
     )
       throw new Error('auth');
-    user.password = await hashSecret(password);
-    data.audit.push({
-      id: crypto.randomUUID(),
-      at: clock.now(),
-      userId: user.id,
-      action: 'user',
-      detail: ar.recoveryReset,
+    const hash = await hashSecret(password);
+    const data = await repository.update((draft) => {
+      const target = draft.users.find(
+        (u) => u.id === user.id && u.active && u.recovery === user.recovery,
+      );
+      if (!target) throw new Error('auth');
+      target.password = hash;
+      draft.audit.push({
+        id: crypto.randomUUID(),
+        at: clock.now(),
+        userId: user.id,
+        action: 'user',
+        detail: ar.recoveryReset,
+      });
     });
-    await repository.save(data);
     useStore.setState({ data, userId: null });
   },
   async backup() {
@@ -470,6 +503,9 @@ export const commands = {
     if (existing.users.length && !currentUser()?.admin)
       throw new Error('denied');
     const data = restore(text);
+    data.settings.persistent = existing.users.length
+      ? ((await navigator.storage?.persisted?.().catch(() => false)) ?? false)
+      : ((await navigator.storage?.persist?.().catch(() => false)) ?? false);
     data.audit.push({
       id: crypto.randomUUID(),
       at: clock.now(),
@@ -477,7 +513,17 @@ export const commands = {
       action: 'restore',
       detail: '',
     });
-    await repository.save(data);
+    await repository.update((current) => {
+      const actor = current.users.find(
+        (u) => u.id === useStore.getState().userId && u.active && u.admin,
+      );
+      if (
+        current.users.length &&
+        (!actor || actor.password !== currentUser()?.password)
+      )
+        throw new Error('denied');
+      Object.assign(current, data);
+    });
     useStore.setState({ data, userId: null });
   },
   async reminder() {

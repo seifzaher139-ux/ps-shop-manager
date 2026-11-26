@@ -1,3 +1,4 @@
+import { totals } from '../core/logic';
 import Dexie, { type Table } from 'dexie';
 import { defaults, permissions, type State, type Audit } from '../core/model';
 export interface Repository {
@@ -8,8 +9,8 @@ export interface Repository {
 class Database extends Dexie {
   snapshots!: Table<State & { id: string }, string>;
   audit!: Table<Audit, string>;
-  constructor() {
-    super('ps-shop-manager');
+  constructor(name: string) {
+    super(name);
     this.version(1).stores({ snapshots: 'id' });
     this.version(2)
       .stores({ snapshots: 'id', audit: 'id,at,userId,action' })
@@ -18,14 +19,16 @@ class Database extends Dexie {
           .table('snapshots')
           .toCollection()
           .modify((row) => {
-            row.schemaVersion = 2;
-            row.appVersion = '1.0.0';
+            Object.assign(row, migrate({ ...row, schemaVersion: 1 }));
           }),
       );
   }
 }
 export class DexieRepository implements Repository {
-  private db = new Database();
+  private db: Database;
+  constructor(name = 'ps-shop-manager') {
+    this.db = new Database(name);
+  }
   async load() {
     const row = await this.db.snapshots.get('main');
     if (!row) return defaults();
@@ -40,6 +43,7 @@ export class DexieRepository implements Repository {
         const row = await this.db.snapshots.get('main');
         const state = row ? migrate(row) : defaults();
         change(state);
+        validate(state);
         await this.db.snapshots.put({ ...structuredClone(state), id: 'main' });
         await this.db.audit.clear();
         await this.db.audit.bulkPut(structuredClone(state.audit));
@@ -48,6 +52,7 @@ export class DexieRepository implements Repository {
     );
   }
   async save(state: State) {
+    validate(state);
     await this.db.transaction(
       'rw',
       [this.db.snapshots, this.db.audit],
@@ -74,7 +79,17 @@ export function migrate(input: unknown): State {
     data.appVersion = '1.0.0';
   }
   validate(data);
-  return {schemaVersion:data.schemaVersion,appVersion:data.appVersion,settings:data.settings,users:data.users,rooms:data.rooms,sessions:data.sessions,shifts:data.shifts,expenses:data.expenses,audit:data.audit};
+  return {
+    schemaVersion: data.schemaVersion,
+    appVersion: data.appVersion,
+    settings: data.settings,
+    users: data.users,
+    rooms: data.rooms,
+    sessions: data.sessions,
+    shifts: data.shifts,
+    expenses: data.expenses,
+    audit: data.audit,
+  };
 }
 function validate(s: State) {
   const fail = () => {
@@ -148,8 +163,11 @@ function validate(s: State) {
     )
       fail();
   for (const c of settings.categories) if (!text(c)) fail();
+  for (const items of [settings.types, settings.services])
+    if (new Set(items.map((x) => x.id)).size !== items.length) fail();
   if (
-    typeof s.appVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(s.appVersion) ||
+    typeof s.appVersion !== 'string' ||
+    !/^\d+\.\d+\.\d+$/.test(s.appVersion) ||
     !s.settings ||
     !Array.isArray(s.users) ||
     !Array.isArray(s.rooms) ||
@@ -194,7 +212,10 @@ function validate(s: State) {
       typeof u.admin !== 'boolean' ||
       typeof u.active !== 'boolean' ||
       u.permissions.some((p) => !permissions.includes(p)) ||
-      !text(u.username)
+      !text(u.username) ||
+      !/^pbkdf2:210000:[a-f0-9]{32}:[a-f0-9]{64}$/.test(u.password) ||
+      (u.recovery !== undefined &&
+        !/^pbkdf2:210000:[a-f0-9]{32}:[a-f0-9]{64}$/.test(u.recovery))
     )
       fail();
   }
@@ -279,13 +300,69 @@ function validate(s: State) {
         l.quantity < 1
       )
         throw new Error('invalid-backup');
+    if (x.bill) {
+      for (const key of [
+        'minutes',
+        'billedMinutes',
+        'play',
+        'services',
+        'discount',
+        'total',
+        'paid',
+        'change',
+        'unpaid',
+      ] as const)
+        if (!int(x.bill[key])) fail();
+      if (
+        x.bill.total !== x.bill.play + x.bill.services - x.bill.discount ||
+        x.bill.change !== Math.max(0, x.bill.paid - x.bill.total) ||
+        x.bill.unpaid !== Math.max(0, x.bill.total - x.bill.paid)
+      )
+        fail();
+    }
     if (x.bill)
       for (const n of Object.values(x.bill))
         if (!Number.isSafeInteger(n) || n < 0)
           throw new Error('invalid-backup');
   }
+  for (const shift of s.shifts) {
+    const frozen = shift.frozen;
+    if (!frozen) continue;
+    if (
+      !text(frozen.title) ||
+      !text(frozen.period) ||
+      !time(frozen.generatedAt) ||
+      !Array.isArray(frozen.users) ||
+      frozen.shifts?.some((sh) => sh.frozen) ||
+      !frozen.totals
+    )
+      fail();
+    validate({
+      schemaVersion: s.schemaVersion,
+      appVersion: s.appVersion,
+      settings: frozen.settings,
+      rooms: frozen.rooms ?? s.rooms,
+      users: s.users,
+      sessions: frozen.sessions,
+      shifts: frozen.shifts,
+      expenses: frozen.expenses,
+      audit: [],
+    });
+    const expected = totals(
+      frozen.sessions,
+      frozen.expenses,
+      frozen.generatedAt,
+    );
+    for (const key of Object.keys(expected) as (keyof typeof expected)[])
+      if (expected[key] !== frozen.totals[key]) fail();
+  }
   for (const e of s.expenses)
     if (
+      !text(e.id) ||
+      !text(e.description) ||
+      !text(e.category) ||
+      typeof e.voided !== 'boolean' ||
+      !s.users.some((u) => u.id === e.createdBy) ||
       !Number.isSafeInteger(e.amount) ||
       e.amount < 0 ||
       !s.shifts.some((a) => a.id === e.shiftId)
@@ -306,5 +383,11 @@ export function backup(state: State): string {
 export function restore(text: string): State {
   const raw = JSON.parse(text);
   if (raw.format !== 'ps-shop-manager') throw new Error('invalid-backup');
-  return migrate(raw);
+  try {
+    return migrate(raw);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'backup-version')
+      throw error;
+    throw new Error('invalid-backup');
+  }
 }

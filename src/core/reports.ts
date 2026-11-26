@@ -11,14 +11,15 @@ export function reportRows(report: Report): (string | number)[][] {
     [ar.device, report.settings.device],
     [ar.generated, dateTime(report.generatedAt, report.settings.timezone)],
     [ar.totalsFinal],
+    [ar.currency, report.settings.currency],
     [],
     [ar.shift, ar.from, ar.to, ar.openedBy, ar.closedBy, ar.status],
   ];
   for (const shift of report.shifts)
     rows.push([
       shift.date,
-      dateTime(shift.start,report.settings.timezone),
-      shift.end ? dateTime(shift.end,report.settings.timezone) : ar.shiftOpen,
+      dateTime(shift.start, report.settings.timezone),
+      shift.end ? dateTime(shift.end, report.settings.timezone) : ar.shiftOpen,
       report.users.find((u) => u.id === shift.openedBy)?.username ?? '',
       report.users.find((u) => u.id === shift.closedBy)?.username ?? '',
       shift.end ? ar.shiftClosed : ar.shiftOpen,
@@ -94,7 +95,7 @@ export function reportRows(report: Report): (string | number)[][] {
   rows.push(
     [],
     [ar.auditSessions],
-    [ar.room, ar.status, ar.from, ar.to, ar.reason],
+    [ar.room, ar.status, ar.from, ar.to, ar.reason, ar.total],
   );
   for (const s of report.sessions.filter(
     (s) => s.status === 'cancelled' || s.status === 'voided',
@@ -102,9 +103,10 @@ export function reportRows(report: Report): (string | number)[][] {
     rows.push([
       s.roomName,
       ar[s.status],
-      dateTime(s.start,s.timezone),
-      s.end ? dateTime(s.end,s.timezone) : '',
+      dateTime(s.start, s.timezone),
+      s.end ? dateTime(s.end, s.timezone) : '',
       s.reason ?? '',
+      s.status === 'cancelled' ? 0 : (s.bill?.total ?? 0) / 100,
     ]);
   rows.push(
     [],
@@ -119,16 +121,19 @@ export function reportRows(report: Report): (string | number)[][] {
       ar.total,
     ],
   );
-  for (const id of new Set([...(report.rooms??[]).filter(r=>r.active).map(r=>r.id),...report.sessions.map((s) => s.roomId)])) {
+  for (const id of new Set([
+    ...(report.rooms ?? []).filter((r) => r.active).map((r) => r.id),
+    ...report.sessions.map((s) => s.roomId),
+  ])) {
     const ss = report.sessions.filter((s) => s.roomId === id);
     const t = totals(ss, [], report.generatedAt);
     rows.push([
-      ss[0]?.roomName??report.rooms.find(r=>r.id===id)!.name,
+      ss[0]?.roomName ?? report.rooms.find((r) => r.id === id)!.name,
       t.count,
       ss
         .map(
           (s) =>
-            `${dateTime(s.start)} - ${s.end ? dateTime(s.end,s.timezone) : ar.running}`,
+            `${dateTime(s.start)} - ${s.end ? dateTime(s.end, s.timezone) : ar.running}`,
         )
         .join(' / '),
       t.play / 100,
@@ -173,7 +178,13 @@ export function reportRows(report: Report): (string | number)[][] {
         .filter((e) => e.category === c && !e.voided)
         .reduce((n, e) => n + e.amount, 0) / 100,
     ]);
-  rows.push([], [ar.total]);
+  rows.push(
+    [],
+    [ar.total],
+    [ar.count, report.totals.count],
+    [ar.cancelled, report.totals.cancelled],
+    [ar.voided, report.totals.voided],
+  );
   for (const [label, key] of [
     [ar.play, 'play'],
     [ar.services, 'services'],

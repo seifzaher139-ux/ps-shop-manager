@@ -151,7 +151,7 @@ export function Settings() {
                   ...draft.types,
                   {
                     id: crypto.randomUUID(),
-                    name: ar.newUser,
+                    name: ar.newType,
                     single: 2500,
                     double: 5000,
                     count: 0,

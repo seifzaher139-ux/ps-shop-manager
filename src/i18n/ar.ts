@@ -1,6 +1,9 @@
 import type { Permission, Settings } from '../core/model';
 export const ar = {
   app: 'إدارة البلايستيشن',
+  description: 'إدارة محل البلايستيشن بدون إنترنت',
+  manifestName: 'إدارة محل البلايستيشن',
+  manifestShort: 'البلايستيشن',
   tagline: 'كل روم، كل دقيقة، كل جنيه.',
   welcome: 'أهلاً بيك في محلك',
   setupHint: 'جهّز حسابك وابدأ إدارة المحل. بياناتك محفوظة على الجهاز ده.',
@@ -189,6 +192,7 @@ export const ar = {
   noPermission: 'حسابك مش عنده صلاحية العرض',
   restoreSummary: 'ملخص النسخة',
   records: 'سجل',
+  newType: 'نوع جديد',
   newUser: 'مستخدم جديد',
   account: 'الحساب',
   status: 'الحالة',

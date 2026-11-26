@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { can, buildReport, totals } from '../core/logic';
 import type { Report, Session } from '../core/model';
 import { commands, currentUser, useStore } from '../services/store';
@@ -27,7 +27,7 @@ export function ReportView({ report }: { report: Report }) {
   return (
     <article className="print-area report-paper">
       <header className="report-header">
-        {report.settings.logo && <img src={report.settings.logo} alt="" />}
+        <img src={report.settings.logo || './icons/icon-192.png'} alt="" />
         <div>
           <h2>{report.settings.shopName}</h2>
           <h3>{report.title}</h3>
@@ -42,6 +42,10 @@ export function ReportView({ report }: { report: Report }) {
       </header>
       <Summary report={report} />
       <p className="muted">{ar.totalsFinal}</p>
+      <p className="report-counts">
+        {ar.count}: {report.totals.count} · {ar.cancelled}:{' '}
+        {report.totals.cancelled} · {ar.voided}: {report.totals.voided}
+      </p>
       {rows.slice(5).map((row, i) =>
         row.length === 0 ? (
           <div key={i} className="report-break" />
@@ -78,6 +82,14 @@ export function Reports() {
   const [reminder, setReminder] = useState(
     new URLSearchParams(window.location.hash.split('?')[1]).has('reminder'),
   );
+  useEffect(() => {
+    if (window.location.hash.includes('&reminder=1'))
+      history.replaceState(
+        null,
+        '',
+        window.location.hash.replace('&reminder=1', ''),
+      );
+  }, []);
   const [date, setDate] = useState(
     data.shifts.find((s) => !s.end)?.date ??
       dayKey(now, data.settings.timezone),
@@ -281,7 +293,7 @@ export function SessionReceipt({ session }: { session: Session }) {
     <>
       <article className="print-area receipt">
         <header className="report-header">
-          {data.settings.logo && <img src={data.settings.logo} alt="" />}
+          <img src={data.settings.logo || './icons/icon-192.png'} alt="" />
           <div>
             <h2>{data.settings.shopName}</h2>
             <p>

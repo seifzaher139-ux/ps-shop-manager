@@ -101,7 +101,7 @@ it('enforces active users and admin permissions', () => {
     admin: false,
     active: true,
     permissions: ['startSession'],
-    password: 'hash',
+    password: `pbkdf2:210000:${'a'.repeat(32)}:${'b'.repeat(64)}`,
   };
   expect(can(u, 'startSession')).toBe(true);
   expect(can(u, 'voidSession')).toBe(false);
@@ -161,7 +161,7 @@ function fixture() {
       username: 'admin',
       admin: true,
       active: true,
-      password: 'hash',
+      password: `pbkdf2:210000:${'a'.repeat(32)}:${'b'.repeat(64)}`,
       permissions: [],
     },
   ];

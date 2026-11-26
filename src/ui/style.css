@@ -1151,6 +1151,26 @@ dialog::backdrop {
   }
 }
 
-.gamepad{width:90px;height:58px;display:block;margin:12px auto 10px}.controller{line-height:1}.occupied .gamepad{filter:drop-shadow(0 0 14px #d1849d22)}@media(max-width:680px){.gamepad{width:70px;height:48px;margin:18px auto 14px}}
+.gamepad {
+  width: 90px;
+  height: 58px;
+  display: block;
+  margin: 12px auto 10px;
+}
+.controller {
+  line-height: 1;
+}
+.occupied .gamepad {
+  filter: drop-shadow(0 0 14px #d1849d22);
+}
+@media (max-width: 680px) {
+  .gamepad {
+    width: 70px;
+    height: 48px;
+    margin: 18px auto 14px;
+  }
+}
 
-.check{min-height:44px}
+.check {
+  min-height: 44px;
+}

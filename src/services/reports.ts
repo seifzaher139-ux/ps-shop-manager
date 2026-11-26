@@ -1,9 +1,12 @@
-import type {Report} from '../core/model';
-import {ar} from '../i18n/ar';
-import {reportRows} from '../core/reports';
-export {reportRows,reportBill} from '../core/reports';
-import {fileSaver,safeFilename} from './platform';
+import { can } from '../core/logic';
+import { currentUser } from './store';
+import type { Report } from '../core/model';
+import { ar } from '../i18n/ar';
+import { reportRows } from '../core/reports';
+export { reportRows, reportBill } from '../core/reports';
+import { fileSaver, safeFilename } from './platform';
 export async function exportExcel(report: Report) {
+  if (!can(currentUser(), 'exportReports')) throw new Error('denied');
   const ExcelJS = await import('exceljs');
   const workbook = new ExcelJS.default.Workbook();
   workbook.creator = report.settings.shopName;
@@ -47,12 +50,22 @@ export async function exportExcel(report: Report) {
     fitToWidth: 1,
     fitToHeight: 0,
   };
-  if (report.settings.logo) {
-    const extension = report.settings.logo.startsWith('data:image/png')
-      ? 'png'
-      : 'jpeg';
+  let reportLogo = report.settings.logo;
+  if (!reportLogo) {
+    const response = await fetch(
+      new URL('icons/icon-192.png', document.baseURI),
+    );
+    if (response.ok) {
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      reportLogo =
+        'data:image/png;base64,' +
+        btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+    }
+  }
+  if (reportLogo) {
+    const extension = reportLogo.startsWith('data:image/png') ? 'png' : 'jpeg';
     const image = workbook.addImage({
-      base64: report.settings.logo,
+      base64: reportLogo,
       extension,
     });
     sheet.addImage(image, {
@@ -69,6 +82,7 @@ export async function exportExcel(report: Report) {
   );
 }
 export function printReport(name: string) {
+  if (!can(currentUser(), 'exportReports')) throw new Error('denied');
   const old = document.title;
   document.title = safeFilename(name);
   window.print();
