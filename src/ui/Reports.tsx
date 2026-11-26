@@ -5,6 +5,7 @@ import {
   buildReportDocument,
   dateRangeShiftIds,
   shiftName,
+  type ReportBlock,
   type ReportDocument,
   type ReportField,
   type ReportKind,
@@ -31,140 +32,185 @@ export function ReportView({
   onReceipt?: (id: string) => void;
   onVoid?: (id: string) => void;
 }) {
+  const [detail, setDetail] =
+    useState<Extract<ReportBlock, { type: 'session' }>>();
   return (
-    <article className="print-area report-paper simple-report">
-      <header className="report-header">
-        <img src={doc.settings.logo || './icons/icon-192.png'} alt="" />
-        <div>
-          <h2>{doc.settings.shopName}</h2>
-          <h3>{doc.title}</h3>
-          <p>
-            {doc.period} · {doc.settings.device}
+    <>
+      <article className="print-area report-paper simple-report">
+        <header className="report-header">
+          <img src={doc.settings.logo || './icons/icon-192.png'} alt="" />
+          <div>
+            <h2>{doc.settings.shopName}</h2>
+            <h3>{doc.title}</h3>
+            <p>
+              {doc.period} · {doc.settings.device}
+            </p>
+            <small>
+              {ar.generated}: {dateTime(doc.generatedAt, doc.settings.timezone)}
+            </small>
+          </div>
+        </header>
+        {doc.notes.map((note, index) => (
+          <p className="report-note" key={index}>
+            {note}
           </p>
-          <small>
-            {ar.generated}: {dateTime(doc.generatedAt, doc.settings.timezone)}
-          </small>
-        </div>
-      </header>
-      {doc.notes.map((note, index) => (
-        <p className="report-note" key={index}>
-          {note}
-        </p>
-      ))}
-      {doc.blocks.length ? (
-        doc.blocks.map((block, index) => {
-          if (block.type === 'metrics')
-            return (
-              <dl className="report-totals" key={index}>
-                {block.fields.map((f) => (
-                  <div key={f.label} data-metric={f.label}>
-                    <dt>{f.label}</dt>
-                    <dd>
-                      <bdi>{valueText(f, doc)}</bdi>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            );
-          if (block.type === 'table')
-            return (
-              <div className="report-table-scroll" key={index}>
-                <table className="shift-list-table">
-                  <caption>
-                    {ar.currency}: {doc.settings.currency}
-                  </caption>
-                  <thead>
-                    <tr>
-                      {block.columns.map((c) => (
-                        <th key={c.label} scope="col">
-                          {c.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {block.rows.map((row, i) => (
-                      <tr key={i}>
-                        {row.map((value, j) => (
-                          <td key={j}>
-                            <bdi>
-                              {block.columns[j].format === 'money'
-                                ? number(
-                                    Number(value) / 100,
-                                    doc.settings.indic,
-                                  )
-                                : valueText(
-                                    {
-                                      label: '',
-                                      value,
-                                      format: block.columns[j].format,
-                                    },
-                                    doc,
-                                  )}
-                            </bdi>
-                          </td>
+        ))}
+        {doc.blocks.length ? (
+          doc.blocks.map((block, index) => {
+            if (block.type === 'metrics')
+              return (
+                <dl className="report-totals" key={index}>
+                  {block.fields.map((f) => (
+                    <div key={f.label} data-metric={f.label}>
+                      <dt>{f.label}</dt>
+                      <dd>
+                        <bdi>{valueText(f, doc)}</bdi>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              );
+            if (block.type === 'table')
+              return (
+                <div className="report-table-scroll" key={index}>
+                  <table className="shift-list-table">
+                    <caption>
+                      {ar.currency}: {doc.settings.currency}
+                    </caption>
+                    <thead>
+                      <tr>
+                        {block.columns.map((c) => (
+                          <th key={c.label} scope="col">
+                            {c.label}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          return (
-            <section
-              className="session-report-card"
-              key={block.id}
-              data-session={block.id}
-            >
-              <h3>
-                <bdi>{block.title}</bdi>
-              </h3>
-              <dl>
-                {block.fields.map((f) => (
-                  <div
-                    key={f.label}
-                    className={f.label === ar.total ? 'session-total' : ''}
-                  >
-                    <dt>{f.label}</dt>
-                    <dd>
-                      <bdi>{valueText(f, doc)}</bdi>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {block.status === 'finished' && (onReceipt || onVoid) && (
-                <div className="actions no-print">
-                  {onReceipt && (
-                    <button onClick={() => onReceipt(block.id)}>
-                      {ar.receipt}
-                    </button>
-                  )}
-                  {onVoid && (
-                    <button
-                      className="danger subtle"
-                      onClick={() => onVoid(block.id)}
-                    >
-                      {ar.void}
-                    </button>
-                  )}
+                    </thead>
+                    <tbody>
+                      {block.rows.map((row, i) => (
+                        <tr key={i}>
+                          {row.map((value, j) => (
+                            <td key={j}>
+                              <bdi>
+                                {block.columns[j].format === 'money'
+                                  ? number(
+                                      Number(value) / 100,
+                                      doc.settings.indic,
+                                    )
+                                  : valueText(
+                                      {
+                                        label: '',
+                                        value,
+                                        format: block.columns[j].format,
+                                      },
+                                      doc,
+                                    )}
+                              </bdi>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+              );
+            return (
+              <section
+                className="session-report-card"
+                key={block.id}
+                data-session={block.id}
+              >
+                <button
+                  className="session-report-trigger no-print"
+                  onClick={() => setDetail(block)}
+                  aria-label={`${block.title} · ${ar.tapSession}`}
+                >
+                  <strong>
+                    <bdi>{block.title}</bdi>
+                  </strong>
+                  <span>
+                    {block.fields.find((f) => f.label === ar.status)?.value}
+                  </span>
+                  <bdi>
+                    {valueText(
+                      block.fields.find((f) => f.label === ar.total)!,
+                      doc,
+                    )}
+                  </bdi>
+                  <small>{ar.tapSession}</small>
+                </button>
+                <h3 className="print-only">
+                  <bdi>{block.title}</bdi>
+                </h3>
+                <dl className="print-only session-report-fields">
+                  {block.fields.map((f) => (
+                    <div key={f.label}>
+                      <dt>{f.label}</dt>
+                      <dd>
+                        <bdi>{valueText(f, doc)}</bdi>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            );
+          })
+        ) : (
+          <Empty />
+        )}
+        {doc.footer.length > 0 && (
+          <footer className="report-signature">
+            {doc.footer.map((f) => (
+              <p key={f.label}>
+                {f.label}: <bdi>{valueText(f, doc)}</bdi>
+              </p>
+            ))}
+          </footer>
+        )}
+      </article>
+      {detail && (
+        <Modal title={detail.title} onClose={() => setDetail(undefined)}>
+          <dl className="session-detail-fields">
+            {detail.fields.map((f) => (
+              <div
+                key={f.label}
+                className={f.label === ar.total ? 'session-total' : ''}
+              >
+                <dt>{f.label}</dt>
+                <dd>
+                  <bdi>{valueText(f, doc)}</bdi>
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {detail.status === 'finished' && (
+            <div className="actions no-print">
+              {onReceipt && (
+                <button
+                  onClick={() => {
+                    setDetail(undefined);
+                    onReceipt(detail.id);
+                  }}
+                >
+                  {ar.receipt}
+                </button>
               )}
-            </section>
-          );
-        })
-      ) : (
-        <Empty />
+              {onVoid && (
+                <button
+                  className="danger"
+                  onClick={() => {
+                    setDetail(undefined);
+                    onVoid(detail.id);
+                  }}
+                >
+                  {ar.void}
+                </button>
+              )}
+            </div>
+          )}
+        </Modal>
       )}
-      {doc.footer.length > 0 && (
-        <footer className="report-signature">
-          {doc.footer.map((f) => (
-            <p key={f.label}>
-              {f.label}: <bdi>{valueText(f, doc)}</bdi>
-            </p>
-          ))}
-        </footer>
-      )}
-    </article>
+    </>
   );
 }
 export function Reports() {

@@ -48,7 +48,7 @@ export function RestorePanel() {
       {text && (
         <Modal title={ar.restoreSummary} onClose={() => setText('')}>
           <p>{summary}</p>
-          <p className="notice">{ar.restoreConfirm}</p>
+          <p className="notice">{ar.cloudRestoreHint}</p>
           {currentUser() && <BackupButton />}
           <AsyncButton
             className="danger"

@@ -213,7 +213,11 @@ function validate(s: State) {
       typeof u.active !== 'boolean' ||
       u.permissions.some((p) => !permissions.includes(p)) ||
       !text(u.username) ||
-      !(u.authProvider==='firebase'&&u.admin&&u.password===''||!u.authProvider&&/^pbkdf2:210000:[a-f0-9]{32}:[a-f0-9]{64}$/.test(u.password)) ||
+      !(
+        (u.authProvider === 'firebase' && u.admin && u.password === '') ||
+        (!u.authProvider &&
+          /^pbkdf2:210000:[a-f0-9]{32}:[a-f0-9]{64}$/.test(u.password))
+      ) ||
       (u.recovery !== undefined &&
         !/^pbkdf2:210000:[a-f0-9]{32}:[a-f0-9]{64}$/.test(u.recovery))
     )

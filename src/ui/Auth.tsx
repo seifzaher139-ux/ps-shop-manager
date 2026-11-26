@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ar } from '../i18n/ar';
 import { commands, useStore } from '../services/store';
+import { DexieRepository } from '../data/repository';
 import { AsyncButton, Field, run } from './shared';
-import { RestorePanel } from './Backup';
 export function Recovery({
   code,
   onDone,
@@ -31,115 +31,247 @@ export function Recovery({
     </section>
   );
 }
+
 export function Auth() {
-  const { data, login, setup } = useStore();
-  const [username, setUsername] = useState('');
+  const {
+    data,
+    cloudUid,
+    ownerEmail,
+    cloudError,
+    needsShop,
+    login,
+    setup,
+    finishShop,
+    unlock,
+    logout,
+    load,
+  } = useStore();
+  const [mode, setMode] = useState<'choose' | 'create' | 'existing' | 'reset'>(
+    'choose',
+  );
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [recovery, setRecovery] = useState('');
-  const [recover, setRecover] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
+  const [shop, setShop] = useState('');
   const [busy, setBusy] = useState(false);
-  const first = !data.users.length;
+  const [legacy, setLegacy] = useState(false);
+  const [useLegacy, setUseLegacy] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [role, setRole] = useState('');
+  useEffect(() => {
+    void new DexieRepository()
+      .load()
+      .then((old) => setLegacy(old.users.length > 0))
+      .catch(() => {});
+  }, []);
+  const roles = data.users.filter((u) => u.active);
+  const selected =
+    role ||
+    roles.find((u) => u.authProvider === 'firebase')?.id ||
+    roles[0]?.id ||
+    '';
+  const creating = mode === 'create' || needsShop;
+  const migration =
+    legacy && creating ? (
+      <div className="notice">
+        <p>{ar.legacyFound}</p>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={useLegacy}
+            onChange={(e) => setUseLegacy(e.target.checked)}
+          />
+          {ar.importLegacy}
+        </label>
+        {useLegacy && (
+          <Field label={ar.legacyPassword}>
+            <input
+              required
+              type="password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+            />
+          </Field>
+        )}
+        <small>{ar.legacyHint}</small>
+      </div>
+    ) : null;
   return (
     <main className="auth-shell">
       <div className="auth-brand">
         <img src="./icons/icon-192.png" alt="" />
         <h1>{ar.app}</h1>
         <p>{ar.tagline}</p>
-        <small>{ar.localOnly}</small>
+        <small>{ar.cloudData}</small>
       </div>
-      {code ? (
-        <Recovery
-          code={code}
-          onDone={() => {
-            void run(() => login(username.trim(), password));
-            setCode('');
-          }}
-        />
-      ) : (
-        <section className="auth-card">
-          <span className="eyebrow">{first ? ar.welcome : ar.login}</span>
-          <h2>{first ? ar.setup : recover ? ar.recoveryReset : ar.app}</h2>
-          <p>
-            {first ? ar.setupHint : recover ? ar.recoverHint : ar.localOnly}
-          </p>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              await run(async () => {
-                if (first) {
-                  setCode(await setup(username.trim(), password));
-                } else if (recover) {
-                  await commands.recover(username, recovery, newPassword);
-                  setRecover(false);
-                  useStore.getState().notify(ar.saved);
-                } else await login(username, password);
-              });
-              setBusy(false);
-            }}
-          >
-            <Field label={ar.username}>
-              <input
-                required
-                autoComplete="username"
-                minLength={2}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </Field>
-            {recover ? (
-              <>
-                <Field label={ar.recovery}>
-                  <input
-                    required
-                    dir="ltr"
-                    value={recovery}
-                    onChange={(e) => setRecovery(e.target.value)}
-                  />
-                </Field>
-                <Field label={ar.newPassword}>
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                </Field>
-              </>
-            ) : (
+      <section className="auth-card">
+        {cloudError ? (
+          <>
+            <h2>{ar.cloudFailure}</h2>
+            <p role="alert">{cloudError}</p>
+            <AsyncButton className="primary wide" onClick={load}>
+              {ar.cloudRetry}
+            </AsyncButton>
+            <AsyncButton className="wide" onClick={logout}>
+              {ar.cloudSignOut}
+            </AsyncButton>
+          </>
+        ) : cloudUid && !needsShop ? (
+          <>
+            <h2>{ar.unlock}</h2>
+            <p>{ar.cloudRoleHint}</p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                await run(() => unlock(selected, password));
+                setBusy(false);
+              }}
+            >
+              <Field label={ar.username}>
+                <select
+                  value={selected}
+                  onChange={(e) => setRole(e.target.value)}
+                >
+                  {roles.map((u) => (
+                    <option value={u.id} key={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label={ar.password}>
                 <input
                   required
                   type="password"
-                  autoComplete={first ? 'new-password' : 'current-password'}
-                  minLength={first ? 8 : 1}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </Field>
+              <button className="primary wide" disabled={busy}>
+                {busy ? ar.loading : ar.unlock}
+              </button>
+            </form>
+            <AsyncButton className="wide" onClick={logout}>
+              {ar.cloudSignOut}
+            </AsyncButton>
+          </>
+        ) : mode === 'choose' && !needsShop ? (
+          <>
+            <span className="eyebrow">{ar.welcome}</span>
+            <h2>{ar.cloudStart}</h2>
+            <p>{ar.cloudIntro}</p>
+            <button className="primary wide" onClick={() => setMode('create')}>
+              {ar.createShop}
+            </button>
+            <button className="wide" onClick={() => setMode('existing')}>
+              {ar.useShop}
+            </button>
+          </>
+        ) : (
+          <>
+            <h2>
+              {needsShop
+                ? ar.finishShop
+                : mode === 'reset'
+                  ? ar.resetEmail
+                  : creating
+                    ? ar.createShop
+                    : ar.useShop}
+            </h2>
+            <p>{ar.cloudIntro}</p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                await run(async () => {
+                  if (needsShop)
+                    await finishShop(shop, useLegacy ? oldPassword : undefined);
+                  else if (mode === 'create')
+                    await setup(
+                      email,
+                      password,
+                      shop,
+                      useLegacy ? oldPassword : undefined,
+                    );
+                  else if (mode === 'reset') {
+                    await commands.resetOwnerPassword(email);
+                    useStore.getState().notify(ar.resetSent);
+                    setMode('existing');
+                  } else await login(email, password);
+                });
+                setBusy(false);
+              }}
+            >
+              {needsShop ? (
+                <p>
+                  <bdi>{ownerEmail}</bdi>
+                </p>
+              ) : (
+                <Field label={ar.email}>
+                  <input
+                    required
+                    type="email"
+                    dir="ltr"
+                    autoComplete="username"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </Field>
+              )}
+              {creating && (
+                <Field label={ar.shop}>
+                  <input
+                    required
+                    value={shop}
+                    onChange={(e) => setShop(e.target.value)}
+                  />
+                </Field>
+              )}
+              {!needsShop && mode !== 'reset' && (
+                <Field label={ar.password}>
+                  <input
+                    required
+                    type="password"
+                    minLength={creating ? 8 : 1}
+                    autoComplete={
+                      creating ? 'new-password' : 'current-password'
+                    }
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </Field>
+              )}
+              {migration}
+              <button className="primary wide" disabled={busy}>
+                {busy
+                  ? ar.loading
+                  : needsShop
+                    ? ar.finishShop
+                    : mode === 'reset'
+                      ? ar.resetEmail
+                      : creating
+                        ? ar.createShop
+                        : ar.login}
+              </button>
+            </form>
+            {!creating && mode !== 'reset' && (
+              <button className="text-btn" onClick={() => setMode('reset')}>
+                {ar.recover}
+              </button>
             )}
-            {first && <small>{ar.passwordHint}</small>}
-            <button className="primary wide" disabled={busy}>
-              {busy
-                ? ar.loading
-                : first
-                  ? ar.setup
-                  : recover
-                    ? ar.confirm
-                    : ar.login}
-            </button>
-          </form>
-          {!first && (
-            <button className="text-btn" onClick={() => setRecover(!recover)}>
-              {recover ? ar.login : ar.recover}
-            </button>
-          )}
-          {first && <RestorePanel />}
-        </section>
-      )}
+            {needsShop ? (
+              <AsyncButton className="wide" onClick={logout}>
+                {ar.cloudSignOut}
+              </AsyncButton>
+            ) : (
+              <button className="wide" onClick={() => setMode('choose')}>
+                {ar.close}
+              </button>
+            )}
+          </>
+        )}
+      </section>
     </main>
   );
 }

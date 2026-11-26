@@ -9,7 +9,7 @@ import { Reports } from './Reports';
 import { Expenses } from './Expenses';
 import { Settings } from './Settings';
 export function App() {
-  const { data, ready, userId, message } = useStore();
+  const { data, ready, userId, message, cloudError, saving } = useStore();
   const [fatal, setFatal] = useState(false);
   const [cached, setCached] = useState(false);
   useEffect(() => {
@@ -58,7 +58,7 @@ export function App() {
     };
     const check = () => {
       if (Date.now() - last >= data.settings.idleMinutes * 60000)
-        useStore.getState().logout();
+        useStore.getState().lock();
     };
     const timer = setInterval(check, 1000);
     window.addEventListener('pointerdown', active);
@@ -79,7 +79,7 @@ export function App() {
         </main>
       ) : !ready ? (
         <main className="auth-shell">{ar.loading}</main>
-      ) : !userId ? (
+      ) : !userId || cloudError ? (
         <Auth />
       ) : (
         <div className="app-shell">
@@ -114,11 +114,16 @@ export function App() {
               <span>{data.settings.shopName}</span>
               <div className="connection">
                 <span className="status-dot" />
-                {offlineReady || cached
-                  ? ar.offlineReady
+                {saving
+                  ? ar.cloudSaving
                   : online
-                    ? ar.online
-                    : ar.offline}
+                    ? ar.cloudConnected
+                    : ar.cloudOffline}
+                {(offlineReady || cached) && (
+                  <span className="shell-cached" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
               </div>
             </header>
             <Routes>

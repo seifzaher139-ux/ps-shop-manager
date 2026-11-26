@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DexieRepository, backup, restore } from '../data/repository';
+import { DexieRepository, backup, restore, migrate } from '../data/repository';
 import {
   defaults,
   permissions,
@@ -20,18 +20,31 @@ import {
 } from '../core/logic';
 import { clock, fileSaver, safeFilename } from './platform';
 import { hashSecret, verifySecret, recoveryCode } from './auth';
-import { ar, dayKey } from '../i18n/ar';
-const repository = new DexieRepository();
+import { cloudIdentity, cloudRepository as repository } from './cloud';
+import { ar, dayKey, errorText } from '../i18n/ar';
 interface Store {
   data: State;
   ready: boolean;
   userId: string | null;
   message: string;
+  cloudUid: string | null;
+  ownerEmail: string;
+  cloudError: string;
+  needsShop: boolean;
+  saving: boolean;
   load(): Promise<void>;
   notify(message: string): void;
-  login(username: string, password: string): Promise<void>;
-  logout(): void;
-  setup(username: string, password: string): Promise<string>;
+  login(email: string, password: string): Promise<void>;
+  setup(
+    email: string,
+    password: string,
+    shopName?: string,
+    legacyPassword?: string,
+  ): Promise<void>;
+  finishShop(shopName: string, legacyPassword?: string): Promise<void>;
+  unlock(id: string, password: string): Promise<void>;
+  lock(): void;
+  logout(): Promise<void>;
   mutate(
     permission: Permission | 'admin' | 'self',
     action: string,
@@ -40,80 +53,267 @@ interface Store {
   ): Promise<void>;
 }
 let queue: Promise<unknown> = Promise.resolve();
+let stopWatch: (() => void) | undefined;
+let stopAuth: (() => void) | undefined;
+let initial: Promise<void> | undefined;
+let serial = 0;
+let signingOut = false;
+function online() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine)
+    throw new Error('cloud-offline');
+}
+export function attachOwner(data: State, uid: string, email: string): State {
+  const next = structuredClone(data);
+  next.appVersion = '2.0.0';
+  for (const u of next.users)
+    if (u.authProvider === 'firebase' && u.id !== uid) {
+      u.authProvider = undefined;
+      u.active = false;
+      u.password = `pbkdf2:210000:${'0'.repeat(32)}:${'0'.repeat(64)}`;
+    }
+  const previous = next.users.find((u) => u.id === uid);
+  const owner: User = {
+    id: uid,
+    username: previous?.username ?? email,
+    admin: true,
+    active: true,
+    permissions: [...permissions],
+    password: '',
+    authProvider: 'firebase',
+  };
+  next.users = next.users.some((u) => u.id === uid)
+    ? next.users.map((u) => (u.id === uid ? owner : u))
+    : [...next.users, owner];
+  return migrate(next);
+}
+async function refreshCloud(resetRole = false) {
+  const owner = cloudIdentity.current();
+  if (!owner) return;
+  const request = ++serial;
+  try {
+    const loaded = await repository.loadVersion();
+    if (request !== serial || cloudIdentity.current()?.uid !== owner.uid)
+      return;
+    if (!loaded) {
+      useStore.setState({
+        data: defaults(),
+        userId: null,
+        needsShop: true,
+        cloudError: '',
+        ready: true,
+      });
+      return;
+    }
+    const current = useStore.getState();
+    const role = loaded.state.users.find(
+      (u) => u.id === current.userId && u.active,
+    );
+    const prior = current.data.users.find((u) => u.id === current.userId);
+    const ownerRole = loaded.state.users.find(
+      (u) => u.id === owner.uid && u.active && u.authProvider === 'firebase',
+    );
+    if (!ownerRole) throw new Error('cloud-owner-missing');
+    useStore.setState({
+      data: loaded.state,
+      userId: resetRole
+        ? owner.uid
+        : role && prior?.password === role.password
+          ? role.id
+          : null,
+      needsShop: false,
+      cloudError: '',
+      ready: true,
+    });
+  } catch (error) {
+    if (request === serial)
+      useStore.setState({ cloudError: errorText(error), ready: true });
+  }
+}
+let connection: Promise<void> | undefined;
+let connectionUid: string | null | undefined;
+async function connectOwner(owner: ReturnType<typeof cloudIdentity.current>) {
+  const uid = owner?.uid ?? null;
+  if (connection && connectionUid === uid) return connection;
+  connectionUid = uid;
+  connection = connectOwnerOnce(owner);
+  return connection;
+}
+async function connectOwnerOnce(
+  owner: ReturnType<typeof cloudIdentity.current>,
+) {
+  stopWatch?.();
+  stopWatch = undefined;
+  repository.clearCache();
+  ++serial;
+  useStore.setState({
+    data: defaults(),
+    userId: null,
+    cloudUid: owner?.uid ?? null,
+    ownerEmail: owner?.email ?? '',
+    cloudError: '',
+    needsShop: false,
+    ready: !owner && !signingOut,
+  });
+  if (!owner) return;
+  await refreshCloud(true);
+  if (
+    cloudIdentity.current()?.uid === owner.uid &&
+    !useStore.getState().needsShop
+  )
+    observeCloud();
+}
+function observeCloud() {
+  stopWatch?.();
+  stopWatch = repository.observe(
+    () => {
+      void refreshCloud();
+    },
+    (error) => useStore.setState({ cloudError: errorText(error) }),
+  );
+}
 export const useStore = create<Store>((set, get) => ({
   data: defaults(),
   ready: false,
   userId: null,
   message: '',
+  cloudUid: null,
+  ownerEmail: '',
+  cloudError: '',
+  needsShop: false,
+  saving: false,
   notify: (message) => set({ message }),
   async load() {
-    const data = await repository.load();
-    const prior = get();
-    const old = prior.data.users.find((u) => u.id === prior.userId);
-    const next = data.users.find((u) => u.id === prior.userId && u.active);
-    set({
-      data,
-      ready: true,
-      userId:
-        prior.userId && next && old?.password === next.password
-          ? prior.userId
-          : null,
-    });
+    if (!stopAuth) {
+      if (!initial)
+        initial = new Promise<void>((resolve) => {
+          stopAuth = cloudIdentity.observe(
+            (owner) => {
+              void connectOwner(owner).finally(resolve);
+            },
+            (error) => {
+              set({ ready: true, cloudError: errorText(error) });
+              resolve();
+            },
+          );
+        });
+      await initial;
+    } else if (cloudIdentity.current())
+      await refreshCloud(!get().data.users.length);
   },
-  logout() {
+  lock() {
     set({ userId: null });
   },
-  async login(username, password) {
-    const latest = await repository.load();
-    set({ data: latest });
-    const user = latest.users.find((u) => u.username === username && u.active);
-    if (!user || !(await verifySecret(password, user.password)))
-      throw new Error('auth');
-    set({ userId: user.id });
+  async logout() {
+    signingOut = true;
+    ++serial;
+    stopWatch?.();
+    stopWatch = undefined;
+    set({
+      data: defaults(),
+      userId: null,
+      cloudUid: null,
+      ownerEmail: '',
+      needsShop: false,
+      cloudError: '',
+      ready: false,
+    });
     try {
-      await get().mutate('self', 'login', username, () => {});
-    } catch (error) {
-      set({ userId: null });
-      throw error;
+      await cloudIdentity.logout();
+      if (typeof window !== 'undefined') window.location.hash = '/';
+    } finally {
+      signingOut = false;
+      set({ ready: true });
     }
   },
-  async setup(username, password) {
-    if (get().data.users.length) throw new Error('denied');
-    checkCredentials(username, password);
-    const code = recoveryCode();
-    const user: User = {
-      id: crypto.randomUUID(),
-      username,
-      admin: true,
-      active: true,
-      permissions: [...permissions],
-      password: await hashSecret(password),
-      recovery: await hashSecret(code),
-    };
-    const data = defaults();
-    data.users = [user];
+  async login(email, password) {
+    online();
+    await cloudIdentity.login(email, password);
+    await connectOwner(cloudIdentity.current());
+  },
+  async setup(email, password, shopName = ar.app, legacyPassword) {
+    online();
+    if (password.length < 8 || !email.includes('@') || !shopName.trim())
+      throw new Error('invalid');
+    await cloudIdentity.create(email, password);
+    await get().finishShop(shopName, legacyPassword);
+  },
+  async finishShop(shopName, legacyPassword) {
+    online();
+    const owner = cloudIdentity.current();
+    if (!owner?.email) throw new Error('cloud-auth-required');
+    if (!shopName.trim()) throw new Error('invalid');
+    let data = defaults();
+    if (legacyPassword) {
+      const old = await new DexieRepository().load();
+      const valid = await Promise.all(
+        old.users
+          .filter((u) => u.admin && u.active)
+          .map(
+            async (u) =>
+              (await verifySecret(legacyPassword, u.password)) ||
+              (!!u.recovery &&
+                (await verifySecret(
+                  legacyPassword.trim().toUpperCase(),
+                  u.recovery,
+                ))),
+          ),
+      );
+      if (!valid.some(Boolean)) throw new Error('auth');
+      data = old;
+    }
+    data = attachOwner(data, owner.uid, owner.email);
+    data.settings.shopName = shopName.trim();
     data.rooms = reconcileRooms(data);
-    data.settings.persistent =
-      (await navigator.storage?.persist?.().catch(() => false)) ?? false;
     data.audit.push({
       id: crypto.randomUUID(),
       at: clock.now(),
-      userId: user.id,
+      userId: owner.uid,
       action: 'setup',
-      detail: username,
+      detail: shopName,
     });
-    await repository.update((existing) => {
-      if (existing.users.length) throw new Error('denied');
-      Object.assign(existing, data);
+    await repository.create(data);
+    if (cloudIdentity.current()?.uid !== owner.uid)
+      throw new Error('cloud-auth-required');
+    ++serial;
+    set({
+      data,
+      userId: owner.uid,
+      cloudUid: owner.uid,
+      ownerEmail: owner.email,
+      needsShop: false,
+      cloudError: '',
+      ready: true,
     });
-    set({ data, userId: null });
-    return code;
+    stopWatch?.();
+    stopWatch = repository.observe(
+      () => {
+        void refreshCloud();
+      },
+      (error) => set({ cloudError: errorText(error) }),
+    );
+  },
+  async unlock(id, password) {
+    online();
+    const user = get().data.users.find((u) => u.id === id && u.active);
+    if (!user) throw new Error('auth');
+    if (user.authProvider === 'firebase') await cloudIdentity.verify(password);
+    else if (!(await verifySecret(password, user.password)))
+      throw new Error('auth');
+    set({ userId: id });
+    await get().mutate('self', 'login', user.username, () => {});
   },
   mutate(permission, action, detail, change) {
+    const expectedOwner = get().cloudUid;
+    const expectedRole = get().userId;
     const execute = async () => {
-      const state = get();
-      const user = state.data.users.find(
-        (u) => u.id === state.userId && u.active,
+      online();
+      if (get().cloudUid !== expectedOwner || get().userId !== expectedRole)
+        throw new Error('cloud-auth-required');
+      const uid = get().cloudUid;
+      if (!uid || cloudIdentity.current()?.uid !== uid)
+        throw new Error('cloud-auth-required');
+      const user = get().data.users.find(
+        (u) => u.id === get().userId && u.active,
       );
       if (
         !user ||
@@ -124,34 +324,43 @@ export const useStore = create<Store>((set, get) => ({
             : !can(user, permission))
       )
         throw new Error('denied');
-      const data = await repository.update((draft) => {
-        const actor = draft.users.find((u) => u.id === user.id && u.active);
-        if (
-          !actor ||
-          actor.password !== user.password ||
-          (permission === 'admin'
-            ? !actor.admin
-            : permission === 'self'
-              ? false
-              : !can(actor, permission))
-        )
-          throw new Error('denied');
-        change(draft, actor);
-        draft.audit.push({
-          id: crypto.randomUUID(),
-          at: clock.now(),
-          userId: actor.id,
-          action,
-          detail,
+      set({ saving: true });
+      try {
+        const data = await repository.update((draft) => {
+          const actor = draft.users.find((u) => u.id === user.id && u.active);
+          if (
+            !actor ||
+            actor.password !== user.password ||
+            (permission === 'admin'
+              ? !actor.admin
+              : permission === 'self'
+                ? false
+                : !can(actor, permission))
+          )
+            throw new Error('denied');
+          change(draft, actor);
+          draft.audit.push({
+            id: crypto.randomUUID(),
+            at: clock.now(),
+            userId: actor.id,
+            action,
+            detail,
+          });
         });
-      });
-      set({ data });
+        if (get().cloudUid === uid) {
+          set({ data, cloudError: '' });
+          await refreshCloud();
+        }
+      } finally {
+        set({ saving: false });
+      }
     };
     const promise = queue.then(execute);
     queue = promise.catch(() => {});
     return promise;
   },
 }));
+
 export function currentUser() {
   const { data, userId } = useStore.getState();
   return data.users.find((u) => u.id === userId);
@@ -414,6 +623,8 @@ export const commands = {
     });
   },
   async user(user: User, password?: string) {
+    if (user.authProvider === 'firebase' && password)
+      throw new Error('firebase-recovery');
     if (password) checkCredentials(user.username, password);
     const passwordHash = password ? await hashSecret(password) : user.password;
     await mutate('admin', 'user', user.username, (data, actor) => {
@@ -422,7 +633,7 @@ export const commands = {
           (u) => u.username === user.username && u.id !== user.id,
         ) ||
         !user.username.trim() ||
-        !passwordHash ||
+        (!passwordHash && user.authProvider !== 'firebase') ||
         (user.id === actor.id && !user.active)
       )
         throw new Error('invalid');
@@ -441,6 +652,12 @@ export const commands = {
   },
   async password(current: string, next: string) {
     const user = currentUser();
+    if (user?.authProvider === 'firebase') {
+      if (next.length < 8) throw new Error('invalid');
+      await cloudIdentity.password(current, next);
+      await mutate('self', 'user', ar.changePassword, () => {});
+      return;
+    }
     if (!user || !(await verifySecret(current, user.password)))
       throw new Error('auth');
     checkCredentials(user.username, next);
@@ -451,6 +668,7 @@ export const commands = {
   },
   async recovery(password: string) {
     const user = currentUser();
+    if (user?.authProvider === 'firebase') throw new Error('firebase-recovery');
     if (!user?.admin || !(await verifySecret(password, user.password)))
       throw new Error('auth');
     const code = recoveryCode();
@@ -460,7 +678,13 @@ export const commands = {
     });
     return code;
   },
+  async resetOwnerPassword(email: string) {
+    online();
+    await cloudIdentity.reset(email);
+  },
   async recover(username: string, code: string, password: string) {
+    online();
+    if (!useStore.getState().cloudUid) throw new Error('cloud-auth-required');
     checkCredentials(username, password);
     const latest = await repository.load();
     const user = latest.users.find(
@@ -499,32 +723,21 @@ export const commands = {
     return name;
   },
   async restore(text: string) {
-    const existing = useStore.getState().data;
-    if (existing.users.length && !currentUser()?.admin)
-      throw new Error('denied');
-    const data = restore(text);
-    data.settings.persistent = existing.users.length
-      ? ((await navigator.storage?.persisted?.().catch(() => false)) ?? false)
-      : ((await navigator.storage?.persist?.().catch(() => false)) ?? false);
+    online();
+    const owner = cloudIdentity.current();
+    if (!owner?.email || !currentUser()?.admin) throw new Error('denied');
+    const data = attachOwner(restore(text), owner.uid, owner.email);
     data.audit.push({
       id: crypto.randomUUID(),
       at: clock.now(),
-      userId: data.users.find((u) => u.admin)!.id,
+      userId: owner.uid,
       action: 'restore',
       detail: '',
     });
-    await repository.update((current) => {
-      const actor = current.users.find(
-        (u) => u.id === useStore.getState().userId && u.active && u.admin,
-      );
-      if (
-        current.users.length &&
-        (!actor || actor.password !== currentUser()?.password)
-      )
-        throw new Error('denied');
-      Object.assign(current, data);
-    });
-    useStore.setState({ data, userId: null });
+    await repository.save(data);
+    if (cloudIdentity.current()?.uid !== owner.uid)
+      throw new Error('cloud-auth-required');
+    useStore.setState({ data, userId: owner.uid, cloudError: '' });
   },
   async reminder() {
     await mutate('openCloseShift', 'settings', ar.backupReminder, (data) => {

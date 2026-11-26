@@ -1450,3 +1450,60 @@ dialog::backdrop {
     padding: 14px 3px;
   }
 }
+
+.print-only {
+  display: none !important;
+}
+.session-report-trigger {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #eef3fa !important;
+  color: #213450 !important;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  text-align: right;
+  width: 100%;
+  padding: 20px !important;
+}
+.session-report-trigger strong {
+  font-size: 1.1rem;
+}
+.session-report-trigger small {
+  color: #526981;
+  grid-column: 1/-1;
+}
+.session-report-trigger > bdi {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.session-detail-fields {
+  margin: 0;
+}
+.session-detail-fields > div {
+  padding: 12px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #3a4b65;
+}
+.session-detail-fields dt {
+  color: #b8c8df;
+}
+.session-detail-fields dd {
+  margin: 0;
+  font-weight: 600;
+  max-width: 65%;
+  overflow-wrap: anywhere;
+}
+.shell-cached {
+  color: #a3f36b;
+}
+@media print {
+  .print-only {
+    display: block !important;
+  }
+  .session-report-fields.print-only {
+    display: grid !important;
+  }
+}

@@ -2,6 +2,12 @@ rules_version = '2';
 service cloud.firestore {
  match /databases/{database}/documents {
   function owns(shopId) { return request.auth != null && request.auth.uid == shopId; }
+  function followsRevision(shopId, generation) {
+   return !exists(/databases/$(database)/documents/shops/$(shopId))
+    || get(/databases/$(database)/documents/shops/$(shopId)).data.generation != generation
+    || getAfter(/databases/$(database)/documents/shops/$(shopId)).data.revision
+       == get(/databases/$(database)/documents/shops/$(shopId)).data.revision + 1;
+  }
   function tableAllowed(table) { return table in ['users','rooms','sessions','shifts','expenses','audit']; }
   match /shops/{shopId} {
    allow get: if owns(shopId);
@@ -21,22 +27,22 @@ service cloud.firestore {
      && request.resource.data.settings is map;
    match /generations/{generation}/changes/{revision} {
     allow read: if owns(shopId);
-    allow create: if owns(shopId) && request.resource.data.keys().hasOnly(['revision','changes'])
+    allow create: if owns(shopId) && followsRevision(shopId,generation) && request.resource.data.keys().hasOnly(['revision','changes'])
       && request.resource.data.revision is int && request.resource.data.revision > 0 && request.resource.data.changes is list;
     allow update, delete: if false;
    }
    match /generations/{generation}/{table}/{recordId} {
     allow read: if owns(shopId) && tableAllowed(table);
-    allow create, update: if owns(shopId) && tableAllowed(table)
+    allow create, update: if owns(shopId) && tableAllowed(table) && followsRevision(shopId,generation)
       && request.resource.data.id == recordId && request.resource.data.order is int && request.resource.data.order >= 0
       && ((request.resource.data.keys().hasOnly(['id','payload','order']) && request.resource.data.payload is string)
        || (request.resource.data.keys().hasOnly(['id','encoding','parts','order'])
         && request.resource.data.encoding == 'base64' && request.resource.data.parts is int
         && request.resource.data.parts > 0 && request.resource.data.parts <= 10000));
-    allow delete: if owns(shopId) && table == 'rooms';
+    allow delete: if owns(shopId) && table == 'rooms' && followsRevision(shopId,generation);
     match /parts/{partId} {
      allow read: if owns(shopId) && tableAllowed(table);
-     allow create, update: if owns(shopId) && tableAllowed(table)
+     allow create, update: if owns(shopId) && tableAllowed(table) && followsRevision(shopId,generation)
        && request.resource.data.keys().hasOnly(['payload']) && request.resource.data.payload is string;
      allow delete: if false;
     }

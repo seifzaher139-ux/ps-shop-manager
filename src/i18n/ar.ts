@@ -1,6 +1,57 @@
 import type { Permission, Settings } from '../core/model';
 export const ar = {
   app: 'إدارة البلايستيشن',
+  createShop: 'إنشاء محل جديد',
+  useShop: 'استخدام محل موجود',
+  email: 'البريد الإلكتروني',
+  cloudIntro: 'محلك محفوظ في السحابة. ادخل بنفس البريد وكلمة السر من أي جهاز.',
+  cloudConnected: 'متصل بالسحابة',
+  cloudSaving: 'جاري الحفظ في السحابة',
+  cloudOffline: 'الاتصال مقطوع — الحفظ يحتاج إنترنت',
+  cloudStart: 'اختار المحل اللي هتشتغل عليه',
+  finishShop: 'إكمال إعداد المحل',
+  cloudData: 'البيانات محفوظة على حساب المحل في Firestore',
+  cloudBackupHint:
+    'البيانات الأساسية محفوظة على السحابة. مسح بيانات المتصفح ما يمسحش بيانات المحل؛ ادخل بنفس البريد وكلمة السر لاسترجاعها. نسخة JSON إضافية مفيدة للأمان والنقل.',
+  cloudRestoreHint:
+    'الاستعادة هتستبدل بيانات المحل على السحابة لكل الأجهزة. نزّل نسخة أمان وراجع الحساب المفتوح قبل التأكيد.',
+  cloudSignOut: 'تسجيل خروج المحل',
+  switchUser: 'تبديل مستخدم الشفت',
+  unlock: 'فتح المحل',
+  resetEmail: 'إرسال رابط تغيير كلمة السر',
+  resetSent:
+    'لو البريد مسجل، هيوصلك رابط تغيير كلمة السر. راجع الرسائل غير المرغوب فيها.',
+  cloudRetry: 'إعادة تحميل بيانات المحل',
+  cloudPermissions:
+    'صلاحيات قاعدة البيانات غير مفعّلة. انشر قواعد Firestore ثم حاول تاني.',
+  cloudEnableAuth:
+    'فعّل تسجيل الدخول بالبريد وكلمة السر من Firebase Authentication.',
+  cloudEmailUsed: 'البريد مسجل بالفعل. اختار استخدام محل موجود.',
+  cloudDomain:
+    'أضف seifzaher139-ux.github.io إلى النطاقات المسموح بها في Firebase Authentication.',
+  cloudFailure:
+    'تعذر تحميل بيانات المحل من السحابة. راجع الاتصال وإعدادات Firebase ثم حاول تاني.',
+  cloudConflict: 'بيانات المحل اتغيرت من جهاز تاني. حاول العملية مرة كمان.',
+  cloudRestoreConflict:
+    'جهاز تاني عدّل البيانات أثناء الاستعادة. راجع أحدث بيانات المحل وابدأ الاستعادة من جديد.',
+  legacyFound: 'في بيانات قديمة على الجهاز ده',
+  importLegacy: 'نقل البيانات القديمة إلى المحل الجديد',
+  legacyPassword: 'كلمة سر المدير القديم أو كود الاسترجاع',
+  legacyHint:
+    'النقل اختياري، ومش هيمسح النسخة القديمة من الجهاز. حساب المحل السحابي هيتكوّن تلقائيًا.',
+  cloudOwnerPassword:
+    'غيّر كلمة سر حساب المحل من زر تغيير كلمة سري، أو استرجعها بالبريد.',
+  cloudRoleHint: 'اختار مستخدم الشفت. حساب المحل السحابي يفضل متصل.',
+  cloudSecurityHint:
+    'حساب Firebase بيحمي بيانات كل محل من المحلات الأخرى. المستخدمون داخل المحل يشتغلوا تحت جلسة حساب المالك.',
+  cloudMissingOwner: 'نسخة المحل محتاجة استعادة موثوقة لحساب المالك.',
+  tapSession: 'اضغط لعرض تفاصيل الجلسة',
+  excelIndex: '#',
+  cloudAuthRequired: 'ادخل لحساب المحل الأول',
+  cloudActionLarge:
+    'العملية كبيرة جدًا. استخدم استعادة نسخة احتياطية بدل تعديل السجل مرة واحدة.',
+  cloudLegacyLogin: 'الدخول القديم متاح لمستخدم الشفت بعد دخول حساب المحل',
+
   appDescription: 'إدارة محل البلايستيشن بدون إنترنت',
   manifestName: 'إدارة محل البلايستيشن',
   manifestShort: 'البلايستيشن',
@@ -185,7 +236,7 @@ export const ar = {
   shiftRequired: 'لازم تفتح شفت الأول',
   closedError: 'الشفت مقفول ومش قابل للتعديل',
   timeFuture: 'وقت البداية لازم يكون دلوقتي أو قبل كده',
-  localOnly: 'بياناتك على الجهاز ده بس',
+  localOnly: 'محلك معاك على كل أجهزتك',
   today: 'شغل النهارده',
   availableRooms: 'روم متاحة',
   runningRooms: 'روم شغالة',
@@ -291,6 +342,37 @@ export function duration(ms: number) {
 }
 export function errorText(error: unknown) {
   const msg = error instanceof Error ? error.message : '';
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String(error.code)
+      : msg;
+  const firebaseErrors: Record<string, string> = {
+    'auth/invalid-credential': ar.authError,
+    'auth/wrong-password': ar.authError,
+    'auth/user-not-found': ar.authError,
+    'auth/invalid-email': ar.invalid,
+    'auth/email-already-in-use': ar.cloudEmailUsed,
+    'auth/operation-not-allowed': ar.cloudEnableAuth,
+    'auth/configuration-not-found': ar.cloudEnableAuth,
+    'auth/unauthorized-domain': ar.cloudDomain,
+    'auth/network-request-failed': ar.cloudOffline,
+    'auth/weak-password': ar.passwordHint,
+    'auth/too-many-requests': ar.cloudFailure,
+    'permission-denied': ar.cloudPermissions,
+    'firestore/permission-denied': ar.cloudPermissions,
+    unavailable: ar.cloudOffline,
+    'firestore/unavailable': ar.cloudOffline,
+    'cloud-offline': ar.cloudOffline,
+    'cloud-conflict': ar.cloudConflict,
+    'cloud-restore-conflict': ar.cloudRestoreConflict,
+    'cloud-auth-required': ar.cloudAuthRequired,
+    'cloud-owner-missing': ar.cloudMissingOwner,
+    'cloud-action-too-large': ar.cloudActionLarge,
+    'firebase-recovery': ar.cloudOwnerPassword,
+    'cloud-shop-exists': ar.cloudEmailUsed,
+  };
+  if (firebaseErrors[code]) return firebaseErrors[code];
+
   return (
     (
       {

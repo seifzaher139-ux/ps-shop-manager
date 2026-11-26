@@ -24,6 +24,7 @@ export type ReportBlock =
       fields: ReportField[];
     };
 export interface ReportDocument {
+  source: Report;
   kind: ReportKind;
   title: string;
   period: string;
@@ -85,6 +86,7 @@ export function buildReportDocument(
   const shift = report.shifts[0];
   const closed = kind === 'shift' && !!shift?.end;
   const doc: ReportDocument = {
+    source: report,
     kind,
     title:
       kind === 'totals'
@@ -114,6 +116,7 @@ export function buildReportDocument(
           { label: ar.from, format: 'text' },
           { label: ar.to, format: 'text' },
           { label: ar.revenue, format: 'money' },
+          { label: ar.expenses, format: 'money' },
           { label: ar.net, format: 'money' },
         ],
         rows: report.shifts.map((s) => {
@@ -131,6 +134,7 @@ export function buildReportDocument(
                 : dateTime(s.end, report.settings.timezone)
               : ar.running,
             t.play + t.services - t.discounts,
+            t.expenses,
             t.net,
           ];
         }),

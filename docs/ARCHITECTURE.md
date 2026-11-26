@@ -1,27 +1,49 @@
-# Architecture
+# Architecture — cloud edition (2.0.0)
 
-React UI calls application commands, which apply pure domain rules and persist through a Repository interface. UI never accesses Dexie.
+React UI → permission-checked application commands → pure core rules → FirestoreRepository → authenticated owner's shop. Firebase Authentication manages the shop account; Zustand holds a view of server-confirmed data, never the only financial record.
 
-- `src/core`: types, integer money, billing, permissions, room reconciliation, report builders and aggregation. No React, DOM, IndexedDB, implicit current time or Date.now(). Time is passed in.
-- `src/data`: Repository, Dexie, backup codec, version migration and validation. Schema v1 stored snapshots. V2 adds defaults/app version and an indexed audit table. A snapshot is the authoritative aggregate and its audit array is mirrored to the audit table in the same transaction. This prioritizes atomic consistency over multi-table joins; history is retained indefinitely.
-- `src/services`: permission-checked commands, PBKDF2 authentication, Clock/FileSaver interfaces, image resizing and report exports. Writes are serialized in-tab and reread current storage inside IndexedDB transactions. Errors roll back the whole operation and its audit event.
-- `src/ui`: RTL React screens, Zustand projection and memory-only login. HashRouter supports static subpaths. Timers derive from stored timestamps rather than incrementing counters. Dialog portals permit printing receipts while hiding the main app.
-- `src/i18n/ar.ts`: reusable UI text, seed labels, permissions, actions and formatters. User-entered names are data. Pure seed constants are usable by domain defaults.
+- `src/core`: integer money, pricing, permissions, room reconciliation, shift/day aggregation and report models. No React, DOM, database access or implicit current time. `ReportDocument.source` preserves the raw live/frozen Report for the session-table Excel export.
+- `src/data/cloud-repository.ts`: current primary repository. It uses server reads and transactions, normalizes record collections, checks revisions and applies incremental change logs. It supports consistent fresh-browser reads, concurrent writers, chunked oversized records and atomic restore generations.
+- `src/data/repository.ts`: backup validation/migrations and the **legacy-only** Dexie reader/adapter. Normal cloud operation never writes financial data to this browser database. It remains to safely discover/import prior installations and for isolated domain tests.
+- `src/services/firebase.ts`: lazy Firebase SDK initialization with the supplied public web config. Firestore cache is memory-only. A build-time demo flag connects tests to local emulators; production verification rejects that target in dist.
+- `src/services/cloud.ts`: Firebase email/password create/login/logout/re-auth/password reset/change and the repository instance.
+- `src/services/store.ts`: owner account lifecycle, migration, local shift-user roles, command queue, clock and transactional financial invariants. Firebase auth restoration selects the existing owner automatically; an incomplete signup can finish its shop setup without another account.
+- `src/services/reports.ts`: Arabic RTL Excel and print adapter. Shift Excel has a compact summary and exactly one 12-column session table with cached total formulas, borders, dark header, frozen rows and numeric/date formats. Excel dates represent shop-local wall-clock time rather than the exporting device timezone.
+- `src/ui`: Arabic RTL screens. The start screen offers create/use shop, account recovery is email-based, and a role lock keeps the authenticated shop separate from staff UI permissions. Reports list sessions as tappable summaries; the modal shows detail and PDF prints the full fields.
+- `src/i18n`: Arabic UI text and formatting.
 
-## Evolution and backups
+## Firestore layout
 
-Current `schemaVersion: 2`, `appVersion: 1.0.0`. The migration entry point clones untrusted input, rejects future versions, migrates v1 to v2, then validates. Backups include a format marker, creation timestamp, schema/app versions, settings/logo, users and hashes, rooms, sessions, shifts/frozen reports, expenses and audit. Restore validates shapes, money integers, references, statuses and concurrency invariants before replacement. It is not digitally signed. Future schema changes must append a migration and test fixture.
+```
+shops/{firebaseOwnerUid}
+  ownerId, generation, revision, schemaVersion, appVersion, settings
+  generations/{generation}/users/{id}
+  generations/{generation}/rooms/{id}
+  generations/{generation}/sessions/{id}
+  generations/{generation}/shifts/{id}
+  generations/{generation}/expenses/{id}
+  generations/{generation}/audit/{id}
+  generations/{generation}/changes/{revision}
+```
 
-Financial records are logically cancelled or voided, never deleted by business actions. Explicit whole-device restore replaces the database and offers a safety copy first. A repository implementation can be swapped without touching domain code.
+Normal record documents contain id, order and JSON payload. The explicit order preserves existing arrays across Firestore's document-ID query ordering. Large payloads are UTF-8/base64 chunked into record `/parts/{partId}` documents below Firestore's document limit. JSON removes undefined optional fields. The shared root settings include all catalogs, rates, categories, logo and the original device label.
 
-## Offline lifecycle
+## Consistency and cost control
 
-Relative Vite base and HashRouter support repository hosting. Workbox precaches HTML, JavaScript (including lazy Excel), CSS, Cairo and icons. Manifest supplies Arabic name/dir/lang, scope, standalone display and maskable icons. Register type is prompt, with Arabic activation UI. First visit needs HTTPS or localhost; subsequent loads use service worker and IndexedDB. No runtime API/CDN requests exist. The browser smoke test asserts no external requests and reloads offline.
+The first load reads the root revision, all active-generation records and the root again; a changed revision retries. A memory projection is used only after confirming its revision from the server. For nearby revisions, immutable change logs identify only the changed records, avoiding rereading years of history for each action. Longer gaps or restore-generation changes trigger a full server reload. Root onSnapshot notifications drive active-device refreshes.
 
-## Validation
+A command validates the latest state, then a transaction rereads the root revision and writes changed records, its change log and revision+1 atomically. A competing device retries against fresh state; busy-room and open-shift invariants run again. Rules may reject stale optimistic revisions before SDK retry; the repository retries that case only after confirming an actual server revision change. It never treats a permission failure as success.
 
-Typecheck, ESLint, Vitest, build and Playwright run in CI. The browser flow covers setup/recovery, running timer reload, services, discount/payment/change, expense, closing report, Excel download, backup and offline reload. It collects mobile screenshots and a browser-printed Arabic sample PDF. Unit tests cover every rounding boundary, money modes, totals, permissions, backup rejection/migration and persistence; React tests guard recovery acknowledgement.
+Restore stages a complete fresh generation in bounded batches, then switches the root pointer in a transaction only if the original revision is unchanged. Partial uploads are not visible as the current ledger. A conflicting restore stops for owner review. Old generations remain owner-protected, and no financial records are hard-deleted. Unused room removal is the only normal delete.
 
-## Report presentation
+## Accounts and security boundary
 
-`src/core/reports.ts` builds an ordered ReportDocument with metrics, a five-column table or per-session field blocks. The three report screens, HTML/PDF and Excel consume the same blocks in the same order. Data-range selection is inclusive by shift opening date. This presentation is built on demand from existing live or frozen Report data; backup/schema versions remain unchanged. Closed snapshots are never rewritten for a layout change.
+One Firebase UID owns one shop. Rules restrict the path to that UID and immutable ownerId; listing shops and cross-owner access are denied. Staff roles remain app-level profiles inside the owner-authenticated shop session. They are not Firebase members, and do not get independent Firestore authority. An owner token has full authority over that owner's shop; local UI permissions are not a tamper-proof security boundary against developer tools.
+
+Firebase owner passwords/tokens never enter State or JSON backups. Owner records have `authProvider: firebase` and an empty password field. Legacy/staff hashes remain PBKDF2. Restoring a file rebinds the current authenticated owner and retains historical user references; it does not import a Firebase login or grant access to a foreign UID.
+
+## Offline and deployment
+
+Only static PWA assets are precached. Firestore transactions require a network connection and there is no offline write queue or local-only success. Existing timers can display from the loaded view while disconnected. A cleared/new browser signs in and obtains server data again.
+
+Logical backup schema remains 2; app version is 2.0.0. Older v1/v2 local backups migrate before upload. The cloud physical structure is independent of that logical DTO. HashRouter/relative assets support Pages. CI builds production into dist and emulator UI into dist-e2e, runs Java 21 Auth/Firestore emulators and rules/browser tests, verifies the production project ID, then publishes only dist.

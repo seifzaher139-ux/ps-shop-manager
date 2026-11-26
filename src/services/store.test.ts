@@ -1,3 +1,29 @@
+vi.mock('./cloud', async () => {
+  const { DexieRepository } = await import('../data/repository');
+  const r = new DexieRepository();
+  return {
+    cloudRepository: {
+      clearCache: () => {},
+      load: () => r.load(),
+      loadVersion: async () => ({
+        state: await r.load(),
+        head: { revision: 0 },
+      }),
+      update: (fn: (s: State) => void) => r.update(fn),
+      save: (s: State) => r.save(s),
+      create: (s: State) => r.save(s),
+      observe: () => () => {},
+    },
+    cloudIdentity: {
+      current: () => ({ uid: 'u', email: 'owner@example.com' }),
+      observe: () => () => {},
+      verify: vi.fn(),
+      logout: vi.fn(),
+      password: vi.fn(),
+      reset: vi.fn(),
+    },
+  };
+});
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { commands, useStore } from './store';
@@ -26,7 +52,13 @@ beforeEach(async () => {
   seed.users = [admin];
   seed.rooms = reconcileRooms(seed);
   await repo.save(seed);
-  useStore.setState({ data: seed, ready: true, userId: 'u' });
+  useStore.setState({
+    data: seed,
+    ready: true,
+    userId: 'u',
+    cloudUid: 'u',
+    ownerEmail: 'owner@example.com',
+  });
 });
 afterEach(() => {
   vi.restoreAllMocks();

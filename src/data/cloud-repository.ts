@@ -122,7 +122,10 @@ export class FirestoreRepository implements Repository {
         this.cached.head.generation === head.generation
           ? structuredClone(this.cached)
           : undefined;
-      if (cached?.head.revision === head.revision) return cached;
+      if (cached?.head.revision === head.revision) {
+        if (this.owner() !== shop.id) throw new Error('cloud-auth-required');
+        return cached;
+      }
       const state = {
         ...defaults(),
         schemaVersion: head.schemaVersion,

@@ -120,7 +120,7 @@ it('has exactly three reports and inclusive totals filters without detailed sect
   expect(screen.getByRole('alert')).toHaveTextContent(ar.invalidDateRange);
   expect(screen.getByRole('button', { name: ar.excel })).toBeDisabled();
 });
-it('lists each selected-day shift in just five columns with no session detail', () => {
+it('lists each selected-day shift in just six columns with no session detail', () => {
   const { container } = render(<Reports />);
   fireEvent.click(screen.getByRole('tab', { name: ar.shiftsReport }));
   fireEvent.change(screen.getByLabelText(ar.date), {
@@ -131,7 +131,7 @@ it('lists each selected-day shift in just five columns with no session detail', 
     within(table)
       .getAllByRole('columnheader')
       .map((el) => el.textContent),
-  ).toEqual([ar.name, ar.from, ar.to, ar.revenue, ar.net]);
+  ).toEqual([ar.name, ar.from, ar.to, ar.revenue, ar.expenses, ar.net]);
   expect(within(table).getAllByRole('row')).toHaveLength(2);
   expect(container.querySelector('[data-metric]')).toBeNull();
   expect(container.querySelector('.session-report-card')).toBeNull();
@@ -175,4 +175,15 @@ it('follows a closing deep link to a shift from its opening date, even after mid
   );
   expect(screen.getByLabelText(ar.date)).toHaveValue('2026-11-25');
   expect(screen.getByRole('heading', { name: ar.closingReport })).toBeVisible();
+});
+
+it('opens the tapped session details without cluttering the list', () => {
+  render(<Reports />);
+  fireEvent.click(screen.getByRole('tab', { name: ar.closingReport }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole('button', { name: new RegExp(ar.tapSession) }),
+  );
+  expect(screen.getByRole('dialog')).toHaveTextContent(ar.billedMinutesLabel);
+  expect(screen.getByRole('dialog')).toHaveTextContent(ar.running);
 });

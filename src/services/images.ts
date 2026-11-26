@@ -9,5 +9,5 @@ export async function resizeLogo(file: File): Promise<string> {
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', 0.85);
 }

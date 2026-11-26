@@ -166,7 +166,7 @@ export interface Report {
 export function defaults(): State {
   return {
     schemaVersion: 2,
-    appVersion: '1.0.0',
+    appVersion: '2.0.0',
     settings: {
       shopName: seedText.shop,
       device: seedText.device,

@@ -125,7 +125,7 @@ describe('three report documents', () => {
       false,
     );
   });
-  it('shows just one five-column row per shift and net deducts discounts once', () => {
+  it('shows just one six-column row per shift and net deducts discounts once', () => {
     const d = fixture();
     const doc = buildReportDocument(
       buildReport(d, ['first', 'second'], now, '', 'day'),
@@ -139,10 +139,11 @@ describe('three report documents', () => {
       ar.from,
       ar.to,
       ar.revenue,
+      ar.expenses,
       ar.net,
     ]);
     expect(b.rows).toHaveLength(2);
-    expect(b.rows[0].slice(-2)).toEqual([3000, 2000]);
+    expect(b.rows[0].slice(-3)).toEqual([3000, 1000, 2000]);
     expect(b.rows[1][0]).toBe(`${ar.shift} 2`);
     expect(doc.footer).toEqual([]);
     expect(doc.notes).toEqual([]);

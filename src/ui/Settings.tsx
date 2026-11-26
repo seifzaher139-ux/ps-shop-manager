@@ -12,7 +12,7 @@ import { AsyncButton, Field, Modal, run } from './shared';
 import { BackupButton, RestorePanel } from './Backup';
 import { Recovery } from './Auth';
 export function Settings() {
-  const { data } = useStore();
+  const { data, ownerEmail } = useStore();
   const user = currentUser()!;
   const [draft, setDraft] = useState<ShopSettings>(
     structuredClone(data.settings),
@@ -307,13 +307,8 @@ export function Settings() {
       )}
       <section className="panel">
         <h2>{ar.backup}</h2>
-        <p>{ar.backupHint}</p>
-        <p>
-          {ar.persistent}:{' '}
-          <strong>
-            {data.settings.persistent ? ar.granted : ar.notGranted}
-          </strong>
-        </p>
+        <p>{ar.cloudBackupHint}</p>
+
         <p>
           {navigator.onLine ? ar.online : ar.offline} ·{' '}
           {window.matchMedia('(display-mode: standalone)').matches
@@ -331,16 +326,24 @@ export function Settings() {
         <p>
           {user.username} · {user.admin ? ar.admin : ar.users}
         </p>
+        {user.authProvider === 'firebase' && (
+          <p>
+            {ar.email}: <bdi>{ownerEmail}</bdi>
+          </p>
+        )}
         <div className="actions">
           <button onClick={() => setAccount(true)}>{ar.changePassword}</button>
-          {user.admin && (
+          {user.admin && user.authProvider !== 'firebase' && (
             <button onClick={() => setRecovery(true)}>{ar.newRecovery}</button>
           )}
-          <button onClick={() => useStore.getState().logout()}>
-            {ar.logout}
+          <button onClick={() => useStore.getState().lock()}>
+            {ar.switchUser}
           </button>
+          <AsyncButton onClick={() => useStore.getState().logout()}>
+            {ar.logout}
+          </AsyncButton>
         </div>
-        <p className="muted">{ar.securityHint}</p>
+        <p className="muted">{ar.cloudSecurityHint}</p>
       </section>
       {user.admin && (
         <>
@@ -483,14 +486,18 @@ function UserDialog({ user, onClose }: { user: User; onClose: () => void }) {
           onChange={(e) => setDraft({ ...draft, username: e.target.value })}
         />
       </Field>
-      <Field label={ar.newPassword}>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <small>{ar.passwordHint}</small>
-      </Field>
+      {draft.authProvider === 'firebase' ? (
+        <p>{ar.cloudOwnerPassword}</p>
+      ) : (
+        <Field label={ar.newPassword}>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <small>{ar.passwordHint}</small>
+        </Field>
+      )}
       {!draft.admin && (
         <>
           <label className="check">

@@ -1,10 +1,14 @@
 # PS Shop Manager
 
-Arabic RTL offline-first PlayStation room management. React 18, strict TypeScript, Vite, HashRouter, Zustand, Dexie, Workbox and ExcelJS. No backend, cloud accounts, telemetry or runtime CDN dependencies. Each installation is independent.
+Arabic RTL PlayStation shop management with **Firebase Authentication (Email/Password) and Cloud Firestore**. Version 2 replaces browser-only financial storage. Each Firebase owner UID owns a separate shop; another browser/device loads the same records after sign-in. No backend server or service-account secret is shipped.
 
-## Run and validate
+Live app: https://seifzaher139-ux.github.io/ps-shop-manager/
 
-Requires Node.js 24+ and npm.
+**Production prerequisite:** follow [Firebase console setup](docs/FIREBASE_SETUP.md). Enable Email/Password, create Firestore if needed, paste [firestore.rules](firestore.rules) into **Firestore → Rules → Publish**, and add `seifzaher139-ux.github.io` to Authentication authorized domains. Publishing the static site alone does not configure Firebase security/providers.
+
+## Development and validation
+
+Requires Node.js 24+, npm and Java 21+ for Firebase emulators.
 
 ```sh
 npm ci
@@ -13,43 +17,45 @@ npm run typecheck
 npm run lint
 npm run test
 npm run build
+npm run verify:production
 npx playwright install chromium
 npm run e2e
 ```
 
-Preview the production PWA with `npm exec vite preview -- --host 127.0.0.1 --port 4173`. Development mode does not register the production service worker. `npm run icons` regenerates local icons and copies the licensed Cairo font; `npm run format` applies Prettier.
+`npm run e2e` starts isolated Auth/Firestore emulators using the demo project, runs rule/repository integration tests plus the browser flows, then stops them. `npm run test:cloud` and `npm run test:browser` can be used while emulators are already running. The browser build is written to ignored `dist-e2e`, with emulator config; production stays in `dist`. A deployment guard rejects emulator configuration in the production artifact.
 
-Features: timers, snapshotted rates, services, discounts, paid/change/unpaid, cancellation and voids, shifts, expenses, frozen closing reports, three reports (date-range totals, daily shift rows and live/frozen shift detail), RTL Excel, Arabic print/PDF, users/permissions, recovery, idle lock, local logo/settings and versioned backup/restore.
+`npm run dev` uses the real configured project. For isolated development, start `npx firebase emulators:start --only auth,firestore --project demo-ps-shop-manager`, set `VITE_FIREBASE_EMULATORS=true` in the development shell, then run Vite. Never enable that flag in production. Use the Node 24 CI runtime if a developer-tool engine warns under a newer Node release.
 
-## Deployment
+Features: timed rooms, integer pricing, services/discounts/payments, expenses, shift closing, three reports, printable Arabic PDF, RTL Excel, owner cloud accounts, staff permissions/lock, logo/settings and optional JSON backup/restore. Firestore transactions prevent concurrent busy-room starts and lost writes. Firestore listeners keep active devices updated.
 
-Actions runs typecheck, lint, tests, build and offline smoke and uploads the Pages artifact. Deployment requires repository variable `PAGES_ENABLED=true`. First enable Settings → Pages → GitHub Actions, then set that variable. Relative base and hash routes support repository subpaths.
+## Reports and Excel
 
-The repository is public and Pages is enabled at [PS Shop Manager](https://seifzaher139-ux.github.io/ps-shop-manager/). Successful pushes to main run validation and deploy automatically through the workflow. App data remains local to each browser; publishing source does not publish IndexedDB data.
+- Totals: inclusive opening-date range; play, services, discounts, expenses, net, shift count.
+- Daily shifts: one row each, with name, from, to, revenue, **expenses**, net.
+- Live/final shift: totals plus a clean session list; tap a session for details. Closing freezes the report and opens it automatically. PDF prints full session detail.
+- Shift Excel: small shop/shift/time/financial summary, then **one** 12-column session table (#, room, game type, from, to, minutes charged, play, services, discount, total, paid, change), totals row, dark header, borders, frozen header and typed number/date formats. Other report exports retain their summary/list purpose.
+
+## Hosting
+
+The public repository deploys successful main pushes to GitHub Pages through Actions. CI checks TypeScript, lint, unit/UI tests, production build, emulator/rules tests, browser flows and production Firebase target. `PAGES_ENABLED=true` enables the deployment job. HashRouter and a relative Vite base support the repository path. Shop records are not stored in the repository or Pages files.
 
 ## Documentation
 
-- [Decisions and formulas](docs/ASSUMPTIONS.md)
+- [Firebase setup and local-data migration](docs/FIREBASE_SETUP.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Decisions/formulas](docs/ASSUMPTIONS.md)
 - [Security](docs/SECURITY.md)
-- [Windows/Android conversion](docs/CONVERSION.md)
 - [Verification](docs/VALIDATION.md)
-- [Mobile screenshots](docs/screenshots/)
+- [Future native wrappers](docs/CONVERSION.md)
+- [Screenshots](docs/screenshots/)
 
-## للمالك — طريقة الاستخدام
+## للمالك — الاستخدام الجديد
 
-التطبيق بيحفظ الحسابات على نفس الجهاز. مفيش سيرفر أو مزامنة بين الموبايل واللابتوب.
-
-1. بعد تفعيل النشر، افتح الرابط في Chrome على أندرويد واستنى «جاهز بدون إنترنت».
-2. من قائمة Chrome اختار «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية». على اللابتوب استخدم التثبيت في Chrome أو Edge. أول تحميل محتاج إنترنت وبعده التطبيق يشتغل من غيره.
-3. أول مرة أنشئ حساب المدير بكلمة سر 8 حروف على الأقل. احفظ كود الاسترجاع اللي هيظهر مرة واحدة؛ تستخدمه من «نسيت كلمة السر؟» بدون إنترنت.
-4. من الإعدادات عدّل اسم المحل والشعار واسم الجهاز والأسعار وعدد الرومز والخدمات. الافتراضي: PS4 فردي 25 وزوجي 50، PS5 فردي 60 وزوجي 80 جنيه للساعة.
-5. افتح شفت واضغط روم متاحة. الروم الشغالة بتفتح تفاصيل الخدمات والإنهاء. المؤقت محفوظ حتى لو قفلت التطبيق أو أعدت تشغيل الجهاز.
-6. عند الإنهاء راجع الخصم والمدفوع. التطبيق يبين الباقي للعميل ويحذرك لو فيه غير مدفوع. تقدر تطبع الفاتورة.
-7. ضيف المصاريف أثناء الشفت. انهي أو الغي كل الجلسات قبل التقفيل. التقرير المقفول محفوظ ومش بيتعدل. في «التقارير» هتلاقي 3 تبويبات بس: إجماليات من تاريخ لتاريخ، شفتات يوم في سطور مختصرة، وتقرير قفل الشفت. التبويب الثالث بيفتح تفاصيل الشفت الشغال في أي وقت، وبعد التقفيل بيعرض التقرير النهائي.
-8. «تصدير إكسل» بينزل الجدول. «طباعة / PDF» بيفتح الطباعة؛ اختار حفظ كـ PDF.
-9. اعمل نسخة احتياطية بعد كل يوم. ملف JSON بينزل غالبا في مجلد التحميلات؛ التطبيق ما يقدرش يعرف المسار الكامل. ارفعه على جوجل درايف بنفسك واحتفظ بأكتر من نسخة. للاستعادة اختار الملف وراجع الملخص، نزّل نسخة أمان لو محتاج ثم أكد الاستبدال. الاستعادة بتبدّل البيانات ومش بتدمج جهازين.
-10. حذف بيانات الموقع أو ملفات تعريف الارتباط، إزالة التطبيق حسب الجهاز، أو تغيير الموبايل ممكن يضيع الحسابات. مسح الصور والملفات المؤقتة فقط ما يمسحش الحسابات. النسخ هي وسيلة النقل والحماية. مفيش حذف تلقائي للسجل.
-11. لما تظهر «تحديث جديد متاح»، خلّص اللي بتكتبه واضغط «تحديث دلوقتي». الجلسات محفوظة لكن إعادة التحميل بتطلب دخول تاني. خُد نسخة احتياطية قبل تحديث مهم.
-
-الحماية محلية للاستخدام العادي؛ الوصول الكامل لبيانات المتصفح يسمح بتعديلها. اقفل الجهاز واحفظ النسخ وكود الاسترجاع في مكان خاص.
+1. فعّل Firebase ونشر القواعد باتباع [الخطوات](docs/FIREBASE_SETUP.md). افتح التطبيق واقبل «تحديث دلوقتي» لو ظهرت.
+2. أول مرة اختار «إنشاء محل جديد» واكتب اسم المحل والبريد وكلمة السر. حساب المدير بيتكوّن تلقائيًا. بعد كده من أي جهاز اختار «استخدام محل موجود» وادخل **بنفس البريد وكلمة السر**؛ مش هتحتاج تعيد إنشاء المدير.
+3. لو عندك حسابات قديمة على المتصفح، افتح من نفس المتصفح واختار «نقل البيانات القديمة إلى المحل الجديد» وأدخل كلمة سر المدير القديم أو كود الاسترجاع. انقلها قبل مسح بيانات المتصفح. تقدر كمان تستعيد ملف JSON من الإعدادات بعد الدخول للمحل.
+4. البيانات محفوظة في السحابة، ومسح بيانات المتصفح ما يمسحش المحل. الحفظ محتاج إنترنت؛ التطبيق مش هيقول إن معاملة اتحفظت وهي موجودة على جهاز واحد بس. المؤقت يفضل ظاهر أثناء انقطاع الاتصال، لكن إنهاء/بدء الجلسات ينتظر رجوعه.
+5. افتح شفت وابدأ الرومز، وضيف الخدمات والمصاريف. عند الإنهاء راجع الخصم والمدفوع والباقي. قفل الشفت بيحفظ تقريره النهائي. التقرير التفصيلي متاح قبل القفل كمان؛ اضغط أي جلسة لعرض تفاصيلها.
+6. مستخدمو الشفت وصلاحياتهم موجودين من الإعدادات. «تبديل مستخدم الشفت» بيغيّر المستخدم الداخلي تحت جلسة حساب المحل. «تسجيل الخروج» بيخرج حساب المحل من الجهاز. استرجاع كلمة سر حساب المحل بيكون بالبريد الإلكتروني.
+7. نسخة JSON إضافية مفيدة للأمان، وغالبًا بتنزل في مجلد التحميلات. الاستعادة بتستبدل بيانات المحل على السحابة **لكل الأجهزة**، فلازم تراجع الملف والحساب وتاخد نسخة أمان الأول.
+8. من قائمة Chrome اختار تثبيت التطبيق/إضافة إلى الشاشة الرئيسية. ملفات الواجهة تتخزن للتشغيل، لكن ده مش بديل عن الاتصال المطلوب لحفظ الحسابات في السحابة.
