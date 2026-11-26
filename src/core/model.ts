@@ -16,6 +16,7 @@ export const permissions = [
 ] as const;
 export type Permission = (typeof permissions)[number];
 export interface User {
+  authProvider?: 'firebase';
   id: string;
   username: string;
   admin: boolean;

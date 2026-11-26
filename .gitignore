@@ -6,3 +6,7 @@ playwright-report/
 *.tsbuildinfo
 .env*
 tmp/
+
+*-debug.log
+.firebase/
+dist-e2e/

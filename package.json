@@ -11,12 +11,15 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "e2e": "playwright test",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "test:cloud": "vitest run --config vitest.cloud.config.ts",
+    "verify:production": "node scripts/verify-production.mjs"
   },
   "dependencies": {
     "@fontsource/cairo": "^5.2.6",
     "dexie": "^4.0.11",
     "exceljs": "^4.4.0",
+    "firebase": "^13.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.7",
@@ -24,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.23.0",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@playwright/test": "^1.51.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -35,6 +39,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "fake-indexeddb": "^6.0.0",
+    "firebase-tools": "^15.37.0",
     "jsdom": "^26.0.0",
     "prettier": "^3.5.3",
     "sharp": "^0.35.5",
@@ -45,7 +50,8 @@
     "vitest": "^5.1.2"
   },
   "overrides": {
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "@grpc/grpc-js": "^1.13.6"
   },
   "engines": {
     "node": ">=24"

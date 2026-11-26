@@ -1,0 +1,9 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "sessions", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "shifts", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "audit", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "parts", "fieldPath": "payload", "indexes": [] }
+  ]
+}
