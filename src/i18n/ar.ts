@@ -78,8 +78,24 @@ export const ar = {
   printHint: 'اختار حفظ كـ PDF',
   excel: 'تصدير إكسل',
   shiftReport: 'تقرير الشفت',
+  totalsReport: 'تقرير الإجماليات',
+  shiftsReport: 'تقرير الشفتات',
+  liveShiftReport: 'تقرير الشفت التفصيلي',
+  shiftCount: 'عدد الشفتات',
+  fromDate: 'من تاريخ',
+  toDate: 'إلى تاريخ',
+  invalidDateRange: 'اختار تاريخ بداية قبل تاريخ النهاية أو نفس اليوم',
+  currentShift: 'الشفت الشغال حاليًا',
+  liveShiftHint:
+    'تقرير مباشر حتى الآن. حساب الجلسات الشغالة مبدئي ومش داخل في الإجماليات لحد ما تنتهي.',
+  liveReportHint: 'تقرير مباشر حتى الآن — الشفت لسه مفتوح',
+  finalShiftHint: 'التقرير النهائي — الشفت مقفول',
+  session: 'جلسة',
+  billedMinutesLabel: 'الوقت المحسوب بالدقائق',
+  discountReason: 'سبب الخصم',
+  serviceDetails: 'تفاصيل الخدمات',
   dayReport: 'تقرير اليوم',
-  closingReport: 'تقرير تقفيل الشفت',
+  closingReport: 'تقرير قفل الشفت',
   date: 'التاريخ',
   shift: 'الشفت',
   history: 'السجل',
@@ -302,3 +318,12 @@ export const seedText = {
   categories: ['أكل', 'كهرباء', 'صيانة', 'أخرى'],
   room: 'روم',
 };
+
+export function timeOfDay(value: number, timezone = 'Africa/Cairo') {
+  return new Intl.DateTimeFormat('ar-EG-u-nu-latn', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(value);
+}

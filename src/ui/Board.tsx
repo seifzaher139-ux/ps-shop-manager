@@ -204,7 +204,7 @@ export function Board() {
                   ) {
                     await commands.reminder();
                   }
-                  window.location.hash = `/reports?closing=1${state.settings.lastReminder !== dayKey(now, state.settings.timezone) ? '&reminder=1' : ''}`;
+                  window.location.hash = `/reports?closing=1&shift=${encodeURIComponent(state.shifts.at(-1)!.id)}${state.settings.lastReminder !== dayKey(now, state.settings.timezone) ? '&reminder=1' : ''}`;
                 }}
               >
                 {ar.closeShift}

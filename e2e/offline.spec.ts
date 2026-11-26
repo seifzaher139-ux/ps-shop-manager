@@ -80,6 +80,20 @@ test('complete shop flow, export, and offline reload', async ({
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('link', { name: ar.reports, exact: true }).click();
+  await expect(page.getByRole('tab')).toHaveCount(3);
+  await expect(page.locator('[data-metric]')).toHaveCount(6);
+  await page.getByRole('tab', { name: ar.closingReport, exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: ar.liveShiftReport, exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.session-report-card')).toHaveCount(1);
+  await expect(page.locator('.session-report-card')).toContainText(ar.running);
+  await page.screenshot({
+    path: 'docs/screenshots/report-live-390.png',
+    fullPage: true,
+  });
+  await page.getByRole('link', { name: ar.home, exact: true }).click();
   await page.locator('.occupied').click();
   await page.getByRole('button', { name: ar.addService, exact: true }).click();
   await expect(page.getByRole('dialog').getByText('شاي × 1')).toBeVisible();
@@ -153,6 +167,90 @@ test('complete shop flow, export, and offline reload', async ({
     printBackground: true,
     preferCSSPageSize: true,
   });
+  await page.getByRole('tab', { name: ar.totalsReport, exact: true }).click();
+  await expect(page.locator('[data-metric]')).toHaveCount(6);
+  await expect(page.locator('.session-report-card')).toHaveCount(0);
+  await page.screenshot({
+    path: 'docs/screenshots/report-totals-390.png',
+    fullPage: true,
+  });
+  const totalsDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: ar.excel, exact: true }).click();
+  const totalsFile = await totalsDownload;
+  await totalsFile.saveAs('test-results/totals.xlsx');
+  const totalsBook = new ExcelJS.Workbook();
+  await totalsBook.xlsx.readFile('test-results/totals.xlsx');
+  const totalLabels: string[] = [];
+  totalsBook.worksheets[0].eachRow((row) => {
+    if (
+      [
+        ar.play,
+        ar.services,
+        ar.discounts,
+        ar.expenses,
+        ar.net,
+        ar.shiftCount,
+      ].includes(String(row.getCell(1).value) as typeof ar.play)
+    )
+      totalLabels.push(String(row.getCell(1).value));
+  });
+  expect(totalLabels).toEqual([
+    ar.play,
+    ar.services,
+    ar.discounts,
+    ar.expenses,
+    ar.net,
+    ar.shiftCount,
+  ]);
+  await page.pdf({
+    path: 'docs/screenshots/sample-totals.pdf',
+    format: 'A4',
+    printBackground: true,
+    preferCSSPageSize: true,
+  });
+  await page.getByRole('tab', { name: ar.shiftsReport, exact: true }).click();
+  await expect(page.getByRole('columnheader')).toHaveCount(5);
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.locator('.session-report-card')).toHaveCount(0);
+  expect(
+    await page
+      .locator('.shift-list-table')
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  const shiftDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: ar.excel, exact: true }).click();
+  await (await shiftDownload).saveAs('test-results/shifts.xlsx');
+  const shiftsBook = new ExcelJS.Workbook();
+  await shiftsBook.xlsx.readFile('test-results/shifts.xlsx');
+  let headerRow = 0;
+  shiftsBook.worksheets[0].eachRow((row) => {
+    if (row.getCell(1).value === ar.name) headerRow = row.number;
+  });
+  expect(headerRow).toBeGreaterThan(0);
+  expect(shiftsBook.worksheets[0].getRow(headerRow).values).toEqual([
+    undefined,
+    ar.name,
+    ar.from,
+    ar.to,
+    ar.revenue,
+    ar.net,
+  ]);
+  expect(shiftsBook.worksheets[0].getRow(headerRow + 1).getCell(4).value).toBe(
+    20,
+  );
+  expect(shiftsBook.worksheets[0].getRow(headerRow + 1).getCell(5).value).toBe(
+    15,
+  );
+  await page.screenshot({
+    path: 'docs/screenshots/report-shifts-390.png',
+    fullPage: true,
+  });
+  await page.pdf({
+    path: 'docs/screenshots/sample-shifts.pdf',
+    format: 'A4',
+    printBackground: true,
+    preferCSSPageSize: true,
+  });
   await page.getByRole('link', { name: ar.settings, exact: true }).click();
   await page.screenshot({
     path: 'docs/screenshots/settings-390.png',
@@ -176,8 +274,9 @@ test('complete shop flow, export, and offline reload', async ({
   await page.getByRole('button', { name: ar.login, exact: true }).click();
   await page.getByRole('link', { name: ar.reports, exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: ar.dayReport, exact: true }),
+    page.getByRole('heading', { name: ar.totalsReport, exact: true }),
   ).toBeVisible();
+  await page.getByRole('tab', { name: ar.closingReport, exact: true }).click();
   await expect(page.locator('.report-paper')).toContainText('خصم عميل');
   await expect(page.locator('.report-paper')).toContainText('20');
   const offlineExport = page.waitForEvent('download');
@@ -193,6 +292,7 @@ test('complete shop flow, export, and offline reload', async ({
   await page.getByLabel(ar.password, { exact: true }).fill('test-password-123');
   await page.getByRole('button', { name: ar.login, exact: true }).click();
   await page.getByRole('link', { name: ar.reports, exact: true }).click();
+  await page.getByRole('tab', { name: ar.closingReport, exact: true }).click();
   await expect(page.locator('.report-paper')).toContainText('خصم عميل');
   expect(errors).toEqual([]);
   expect(external).toEqual([]);

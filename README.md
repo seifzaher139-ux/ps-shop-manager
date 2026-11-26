@@ -19,13 +19,13 @@ npm run e2e
 
 Preview the production PWA with `npm exec vite preview -- --host 127.0.0.1 --port 4173`. Development mode does not register the production service worker. `npm run icons` regenerates local icons and copies the licensed Cairo font; `npm run format` applies Prettier.
 
-Features: timers, snapshotted rates, services, discounts, paid/change/unpaid, cancellation and voids, shifts, expenses, frozen closing reports, full history/day detail, RTL Excel, Arabic print/PDF, users/permissions, recovery, idle lock, local logo/settings and versioned backup/restore.
+Features: timers, snapshotted rates, services, discounts, paid/change/unpaid, cancellation and voids, shifts, expenses, frozen closing reports, three reports (date-range totals, daily shift rows and live/frozen shift detail), RTL Excel, Arabic print/PDF, users/permissions, recovery, idle lock, local logo/settings and versioned backup/restore.
 
 ## Deployment
 
 Actions runs typecheck, lint, tests, build and offline smoke and uploads the Pages artifact. Deployment requires repository variable `PAGES_ENABLED=true`. First enable Settings → Pages → GitHub Actions, then set that variable. Relative base and hash routes support repository subpaths.
 
-**Current blocker:** GitHub refused Pages setup for this private repository (HTTP 422: account plan does not support it). The repository stays private and no URL is published. When eligible, the expected address is `https://seifzaher139-ux.github.io/ps-shop-manager/`; verify successful deployment before using it. Alternatively serve `dist` on another HTTPS static host. Private source does not necessarily mean private hosting.
+The repository is public and Pages is enabled at [PS Shop Manager](https://seifzaher139-ux.github.io/ps-shop-manager/). Successful pushes to main run validation and deploy automatically through the workflow. App data remains local to each browser; publishing source does not publish IndexedDB data.
 
 ## Documentation
 
@@ -46,7 +46,7 @@ Actions runs typecheck, lint, tests, build and offline smoke and uploads the Pag
 4. من الإعدادات عدّل اسم المحل والشعار واسم الجهاز والأسعار وعدد الرومز والخدمات. الافتراضي: PS4 فردي 25 وزوجي 50، PS5 فردي 60 وزوجي 80 جنيه للساعة.
 5. افتح شفت واضغط روم متاحة. الروم الشغالة بتفتح تفاصيل الخدمات والإنهاء. المؤقت محفوظ حتى لو قفلت التطبيق أو أعدت تشغيل الجهاز.
 6. عند الإنهاء راجع الخصم والمدفوع. التطبيق يبين الباقي للعميل ويحذرك لو فيه غير مدفوع. تقدر تطبع الفاتورة.
-7. ضيف المصاريف أثناء الشفت. انهي أو الغي كل الجلسات قبل التقفيل. التقرير المقفول محفوظ ومش بيتعدل. تقارير اليوم والشفت والسجل في «التقارير».
+7. ضيف المصاريف أثناء الشفت. انهي أو الغي كل الجلسات قبل التقفيل. التقرير المقفول محفوظ ومش بيتعدل. في «التقارير» هتلاقي 3 تبويبات بس: إجماليات من تاريخ لتاريخ، شفتات يوم في سطور مختصرة، وتقرير قفل الشفت. التبويب الثالث بيفتح تفاصيل الشفت الشغال في أي وقت، وبعد التقفيل بيعرض التقرير النهائي.
 8. «تصدير إكسل» بينزل الجدول. «طباعة / PDF» بيفتح الطباعة؛ اختار حفظ كـ PDF.
 9. اعمل نسخة احتياطية بعد كل يوم. ملف JSON بينزل غالبا في مجلد التحميلات؛ التطبيق ما يقدرش يعرف المسار الكامل. ارفعه على جوجل درايف بنفسك واحتفظ بأكتر من نسخة. للاستعادة اختار الملف وراجع الملخص، نزّل نسخة أمان لو محتاج ثم أكد الاستبدال. الاستعادة بتبدّل البيانات ومش بتدمج جهازين.
 10. حذف بيانات الموقع أو ملفات تعريف الارتباط، إزالة التطبيق حسب الجهاز، أو تغيير الموبايل ممكن يضيع الحسابات. مسح الصور والملفات المؤقتة فقط ما يمسحش الحسابات. النسخ هي وسيلة النقل والحماية. مفيش حذف تلقائي للسجل.

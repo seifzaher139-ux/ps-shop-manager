@@ -1,73 +1,168 @@
 import { useEffect, useState } from 'react';
-import { can, buildReport, totals } from '../core/logic';
-import type { Report, Session } from '../core/model';
+import { can, buildReport } from '../core/logic';
+import type { Session } from '../core/model';
+import {
+  buildReportDocument,
+  dateRangeShiftIds,
+  shiftName,
+  type ReportDocument,
+  type ReportField,
+  type ReportKind,
+} from '../core/reports';
 import { commands, currentUser, useStore } from '../services/store';
-import { ar, dateTime, dayKey, money } from '../i18n/ar';
-import { exportExcel, printReport, reportRows } from '../services/reports';
+import { ar, dateTime, dayKey, money, number } from '../i18n/ar';
+import { exportExcel, printReport } from '../services/reports';
 import { BackupButton } from './Backup';
 import { AsyncButton, Empty, Field, Modal, useNow } from './shared';
-export function Summary({ report }: { report: Report }) {
-  return (
-    <div className="report-totals">
-      {(
-        ['play', 'services', 'discounts', 'expenses', 'net', 'unpaid'] as const
-      ).map((key) => (
-        <div key={key}>
-          <span>{ar[key]}</span>
-          <strong>
-            <bdi>{money(report.totals[key], report.settings)}</bdi>
-          </strong>
-        </div>
-      ))}
-    </div>
-  );
+
+function valueText(field: ReportField, doc: ReportDocument): string {
+  return field.format === 'money'
+    ? money(Number(field.value), doc.settings)
+    : field.format === 'number'
+      ? number(Number(field.value), doc.settings.indic)
+      : String(field.value);
 }
-export function ReportView({ report }: { report: Report }) {
-  const rows = reportRows(report);
+export function ReportView({
+  document: doc,
+  onReceipt,
+  onVoid,
+}: {
+  document: ReportDocument;
+  onReceipt?: (id: string) => void;
+  onVoid?: (id: string) => void;
+}) {
   return (
-    <article className="print-area report-paper">
+    <article className="print-area report-paper simple-report">
       <header className="report-header">
-        <img src={report.settings.logo || './icons/icon-192.png'} alt="" />
+        <img src={doc.settings.logo || './icons/icon-192.png'} alt="" />
         <div>
-          <h2>{report.settings.shopName}</h2>
-          <h3>{report.title}</h3>
+          <h2>{doc.settings.shopName}</h2>
+          <h3>{doc.title}</h3>
           <p>
-            {report.period} · {report.settings.device}
+            {doc.period} · {doc.settings.device}
           </p>
           <small>
-            {ar.generated}:{' '}
-            {dateTime(report.generatedAt, report.settings.timezone)}
+            {ar.generated}: {dateTime(doc.generatedAt, doc.settings.timezone)}
           </small>
         </div>
       </header>
-      <Summary report={report} />
-      <p className="muted">{ar.totalsFinal}</p>
-      <p className="report-counts">
-        {ar.count}: {report.totals.count} · {ar.cancelled}:{' '}
-        {report.totals.cancelled} · {ar.voided}: {report.totals.voided}
-      </p>
-      {rows.slice(5).map((row, i) =>
-        row.length === 0 ? (
-          <div key={i} className="report-break" />
-        ) : row.length === 1 ? (
-          <h3 key={i} className="report-section">
-            {row[0]}
-          </h3>
-        ) : (
-          <div className={`report-row cols-${row.length}`} key={i}>
-            {row.map((cell, j) => (
-              <span key={j}>
-                <bdi>
-                  {typeof cell === 'number'
-                    ? new Intl.NumberFormat('en-US', {
-                        maximumFractionDigits: 2,
-                      }).format(cell)
-                    : cell}
-                </bdi>
-              </span>
-            ))}
-          </div>
-        ),
+      {doc.notes.map((note, index) => (
+        <p className="report-note" key={index}>
+          {note}
+        </p>
+      ))}
+      {doc.blocks.length ? (
+        doc.blocks.map((block, index) => {
+          if (block.type === 'metrics')
+            return (
+              <dl className="report-totals" key={index}>
+                {block.fields.map((f) => (
+                  <div key={f.label} data-metric={f.label}>
+                    <dt>{f.label}</dt>
+                    <dd>
+                      <bdi>{valueText(f, doc)}</bdi>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            );
+          if (block.type === 'table')
+            return (
+              <div className="report-table-scroll" key={index}>
+                <table className="shift-list-table">
+                  <caption>
+                    {ar.currency}: {doc.settings.currency}
+                  </caption>
+                  <thead>
+                    <tr>
+                      {block.columns.map((c) => (
+                        <th key={c.label} scope="col">
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, i) => (
+                      <tr key={i}>
+                        {row.map((value, j) => (
+                          <td key={j}>
+                            <bdi>
+                              {block.columns[j].format === 'money'
+                                ? number(
+                                    Number(value) / 100,
+                                    doc.settings.indic,
+                                  )
+                                : valueText(
+                                    {
+                                      label: '',
+                                      value,
+                                      format: block.columns[j].format,
+                                    },
+                                    doc,
+                                  )}
+                            </bdi>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          return (
+            <section
+              className="session-report-card"
+              key={block.id}
+              data-session={block.id}
+            >
+              <h3>
+                <bdi>{block.title}</bdi>
+              </h3>
+              <dl>
+                {block.fields.map((f) => (
+                  <div
+                    key={f.label}
+                    className={f.label === ar.total ? 'session-total' : ''}
+                  >
+                    <dt>{f.label}</dt>
+                    <dd>
+                      <bdi>{valueText(f, doc)}</bdi>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {block.status === 'finished' && (onReceipt || onVoid) && (
+                <div className="actions no-print">
+                  {onReceipt && (
+                    <button onClick={() => onReceipt(block.id)}>
+                      {ar.receipt}
+                    </button>
+                  )}
+                  {onVoid && (
+                    <button
+                      className="danger subtle"
+                      onClick={() => onVoid(block.id)}
+                    >
+                      {ar.void}
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+          );
+        })
+      ) : (
+        <Empty />
+      )}
+      {doc.footer.length > 0 && (
+        <footer className="report-signature">
+          {doc.footer.map((f) => (
+            <p key={f.label}>
+              {f.label}: <bdi>{valueText(f, doc)}</bdi>
+            </p>
+          ))}
+        </footer>
       )}
     </article>
   );
@@ -76,12 +171,25 @@ export function Reports() {
   const { data } = useStore();
   const now = useNow();
   const user = currentUser();
-  const closing = new URLSearchParams(window.location.hash.split('?')[1]).has(
-    'closing',
+  const params = new URLSearchParams(window.location.hash.split('?')[1]);
+  const openShift = data.shifts.find((s) => !s.end);
+  const initialShift =
+    data.shifts.find((s) => s.id === params.get('shift')) ??
+    (params.has('closing') ? data.shifts.at(-1) : openShift) ??
+    data.shifts.at(-1);
+  const today = dayKey(now, data.settings.timezone);
+  const [kind, setKind] = useState<ReportKind>(
+    params.has('closing') || params.has('shift') ? 'shift' : 'totals',
   );
-  const [reminder, setReminder] = useState(
-    new URLSearchParams(window.location.hash.split('?')[1]).has('reminder'),
-  );
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [day, setDay] = useState(today);
+  const [detailDay, setDetailDay] = useState(initialShift?.date ?? today);
+  const [selected, setSelected] = useState(initialShift?.id ?? '');
+  const [reminder, setReminder] = useState(params.has('reminder'));
+  const [receipt, setReceipt] = useState<Session>();
+  const [voidSession, setVoidSession] = useState<Session>();
+  const [reason, setReason] = useState('');
   useEffect(() => {
     if (window.location.hash.includes('&reminder=1'))
       history.replaceState(
@@ -90,92 +198,146 @@ export function Reports() {
         window.location.hash.replace('&reminder=1', ''),
       );
   }, []);
-  const [date, setDate] = useState(
-    data.shifts.find((s) => !s.end)?.date ??
-      dayKey(now, data.settings.timezone),
-  );
-  const [kind, setKind] = useState<'shift' | 'day'>(closing ? 'shift' : 'day');
-  const [selected, setSelected] = useState('');
-  const [receipt, setReceipt] = useState<Session>();
-  const [voidSession, setVoidSession] = useState<Session>();
-  const [reason, setReason] = useState('');
-  const shifts = data.shifts.filter((s) => s.date === date);
+  const choices = data.shifts.filter((s) => s.date === detailDay);
   const shift =
-    shifts.find((s) => s.id === selected) ??
-    (closing ? shifts.at(-1) : shifts.find((s) => !s.end)) ??
-    shifts.at(-1);
+    choices.find((s) => s.id === selected) ??
+    choices.find((s) => !s.end) ??
+    choices.at(-1);
+  const rangeValid = !!from && !!to && from <= to;
   const ids =
-    kind === 'day' ? shifts.map((s) => s.id) : shift ? [shift.id] : [];
+    kind === 'totals'
+      ? rangeValid
+        ? dateRangeShiftIds(data.shifts, from, to)
+        : []
+      : kind === 'shifts'
+        ? data.shifts.filter((s) => s.date === day).map((s) => s.id)
+        : shift
+          ? [shift.id]
+          : [];
+  const period =
+    kind === 'totals' ? `${from} — ${to}` : kind === 'shifts' ? day : detailDay;
   const report =
     kind === 'shift' && shift?.frozen
       ? shift.frozen
-      : buildReport(
-          data,
-          ids,
-          now,
-          kind === 'day' ? ar.dayReport : ar.shiftReport,
-          date,
-        );
+      : buildReport(data, ids, now, '', period);
+  const doc = buildReportDocument(report, kind, data.shifts);
+  const exportable =
+    (kind !== 'totals' || rangeValid) && (kind !== 'shift' || !!shift);
   if (!can(user, 'viewReports')) return <p>{ar.noPermission}</p>;
   return (
     <>
       <div className="page-heading">
-        <div>
-          <span className="eyebrow">{ar.history}</span>
-          <h1>{ar.reports}</h1>
-        </div>
+        <h1>{ar.reports}</h1>
       </div>
       <section className="panel report-controls no-print">
-        <div className="segmented">
-          <button
-            className={kind === 'day' ? 'selected' : ''}
-            onClick={() => setKind('day')}
-          >
-            {ar.dayReport}
-          </button>
-          <button
-            className={kind === 'shift' ? 'selected' : ''}
-            onClick={() => setKind('shift')}
-          >
-            {ar.shiftReport}
-          </button>
+        <div
+          className="segmented report-tabs"
+          role="tablist"
+          aria-label={ar.reports}
+        >
+          {(
+            [
+              ['totals', ar.totalsReport],
+              ['shifts', ar.shiftsReport],
+              ['shift', ar.closingReport],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              id={`tab-${id}`}
+              aria-selected={kind === id}
+              aria-controls="report-panel"
+              className={kind === id ? 'selected' : ''}
+              onClick={() => setKind(id)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="form-grid">
-          <Field label={ar.date}>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setSelected('');
-              }}
-            />
-          </Field>
-          {kind === 'shift' && (
-            <Field label={ar.shift}>
-              <select
-                value={shift?.id ?? ''}
-                onChange={(e) => setSelected(e.target.value)}
-              >
-                {shifts.map((s, i) => (
-                  <option key={s.id} value={s.id}>
-                    {i + 1} · {dateTime(s.start)} ·{' '}
-                    {s.end ? ar.shiftClosed : ar.shiftOpen}
-                  </option>
-                ))}
-              </select>
+          {kind === 'totals' ? (
+            <>
+              <Field label={ar.fromDate}>
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </Field>
+              <Field label={ar.toDate}>
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </Field>
+            </>
+          ) : kind === 'shifts' ? (
+            <Field label={ar.date}>
+              <input
+                type="date"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+              />
             </Field>
+          ) : (
+            <>
+              <Field label={ar.date}>
+                <input
+                  type="date"
+                  value={detailDay}
+                  onChange={(e) => {
+                    setDetailDay(e.target.value);
+                    setSelected('');
+                  }}
+                />
+              </Field>
+              <Field label={ar.shift}>
+                <select
+                  value={shift?.id ?? ''}
+                  onChange={(e) => setSelected(e.target.value)}
+                >
+                  {choices.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {shiftName(s, data.shifts)} ·{' '}
+                      {s.end ? ar.shiftClosed : ar.shiftOpen}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
           )}
         </div>
+        {kind === 'shift' && openShift && openShift.id !== shift?.id && (
+          <button
+            className="wide"
+            onClick={() => {
+              setDetailDay(openShift.date);
+              setSelected(openShift.id);
+            }}
+          >
+            {ar.currentShift}
+          </button>
+        )}
+        {kind === 'totals' && !rangeValid && (
+          <p role="alert" className="notice">
+            {ar.invalidDateRange}
+          </p>
+        )}
         {can(user, 'exportReports') && (
           <div className="actions">
-            <AsyncButton onClick={() => exportExcel(report)}>
+            <AsyncButton
+              disabled={!exportable}
+              onClick={() => exportExcel(doc)}
+            >
               {ar.excel}
             </AsyncButton>
             <button
+              disabled={!exportable}
               onClick={() =>
                 printReport(
-                  `${data.settings.shopName}-${report.title}-${date}-${data.settings.device}`,
+                  `${doc.settings.shopName}-${doc.title}-${doc.period}-${doc.settings.device}`,
                 )
               }
             >
@@ -185,74 +347,29 @@ export function Reports() {
           </div>
         )}
       </section>
-      {ids.length ? (
-        <>
-          <ReportView report={report} />
-          <section className="panel no-print">
-            <h2>{ar.sessions}</h2>
-            {report.sessions.map((s) => (
-              <div className="line" key={s.id}>
-                <span>
-                  <bdi>{s.roomName}</bdi> · {ar[s.status]}
-                </span>
-                <div className="actions">
-                  <button onClick={() => setReceipt(s)}>{ar.receipt}</button>
-                  {s.status === 'finished' &&
-                    !data.shifts.find((x) => x.id === s.shiftId)?.end &&
-                    can(user, 'voidSession') && (
-                      <button
-                        className="danger subtle"
-                        onClick={() => setVoidSession(s)}
-                      >
-                        {ar.void}
-                      </button>
-                    )}
-                </div>
-              </div>
-            ))}
-          </section>
-        </>
-      ) : (
-        <Empty />
-      )}
-      <section className="panel no-print">
-        <h2>{ar.history}</h2>
-        {[...new Set(data.shifts.map((s) => s.date))]
-          .sort()
-          .reverse()
-          .map((day) => {
-            const ids = data.shifts
-              .filter((s) => s.date === day)
-              .map((s) => s.id);
-            const t = totals(
-              data.sessions.filter((s) => ids.includes(s.shiftId)),
-              data.expenses.filter((e) => ids.includes(e.shiftId)),
-              now,
-            );
-            return (
-              <button
-                className="history-item"
-                key={day}
-                onClick={() => {
-                  setDate(day);
-                  setKind('day');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-              >
-                <bdi>{day}</bdi>
-                <span>
-                  {ar.play}: {money(t.play, data.settings)} · {ar.services}:{' '}
-                  {money(t.services, data.settings)} · {ar.discounts}:{' '}
-                  {money(t.discounts, data.settings)} · {ar.expenses}:{' '}
-                  {money(t.expenses, data.settings)}
-                </span>
-                <strong>
-                  {ar.net}: <bdi>{money(t.net, data.settings)}</bdi>
-                </strong>
-              </button>
-            );
-          })}
-      </section>
+      <div id="report-panel" role="tabpanel" aria-labelledby={`tab-${kind}`}>
+        {exportable ? (
+          <ReportView
+            document={doc}
+            onReceipt={
+              kind === 'shift'
+                ? (id) => setReceipt(report.sessions.find((s) => s.id === id))
+                : undefined
+            }
+            onVoid={
+              kind === 'shift' && !shift?.end && can(user, 'voidSession')
+                ? (id) => {
+                    setVoidSession(report.sessions.find((s) => s.id === id));
+                    setReason('');
+                  }
+                : undefined
+            }
+          />
+        ) : kind === 'shift' ? (
+          <Empty />
+        ) : null}
+      </div>
+
       {reminder && (
         <Modal title={ar.backupReminder} onClose={() => setReminder(false)}>
           <p>{ar.backupHint}</p>
@@ -286,6 +403,7 @@ export function Reports() {
     </>
   );
 }
+
 export function SessionReceipt({ session }: { session: Session }) {
   const { data } = useStore();
   const b = session.bill;

@@ -1,204 +1,248 @@
-import type { Report, Session } from './model';
+import type { Report, Session, Shift, Settings } from './model';
 import { calculate, totals } from './logic';
-import { ar, dateTime } from '../i18n/ar';
+import { ar, dateTime, dayKey, timeOfDay, number } from '../i18n/ar';
+
+export type ReportKind = 'totals' | 'shifts' | 'shift';
+export type ValueFormat = 'text' | 'money' | 'number';
+export interface ReportField {
+  label: string;
+  value: string | number;
+  format: ValueFormat;
+}
+export interface ReportColumn {
+  label: string;
+  format: ValueFormat;
+}
+export type ReportBlock =
+  | { type: 'metrics'; fields: ReportField[] }
+  | { type: 'table'; columns: ReportColumn[]; rows: (string | number)[][] }
+  | {
+      type: 'session';
+      id: string;
+      title: string;
+      status: Session['status'];
+      fields: ReportField[];
+    };
+export interface ReportDocument {
+  kind: ReportKind;
+  title: string;
+  period: string;
+  generatedAt: number;
+  settings: Settings;
+  notes: string[];
+  blocks: ReportBlock[];
+  footer: ReportField[];
+}
+export interface ExportRow {
+  cells: (string | number)[];
+  style: 'heading' | 'header' | 'body';
+  formats?: ValueFormat[];
+}
 export function reportBill(session: Session, at: number) {
   return session.bill ?? calculate(session, Math.max(at, session.start), 0);
 }
-export function reportRows(report: Report): (string | number)[][] {
-  const rows: (string | number)[][] = [
-    [report.settings.shopName],
-    [report.title, report.period],
-    [ar.device, report.settings.device],
-    [ar.generated, dateTime(report.generatedAt, report.settings.timezone)],
-    [ar.totalsFinal],
-    [ar.currency, report.settings.currency],
-    [],
-    [ar.shift, ar.from, ar.to, ar.openedBy, ar.closedBy, ar.status],
-  ];
-  for (const shift of report.shifts)
-    rows.push([
-      shift.date,
-      dateTime(shift.start, report.settings.timezone),
-      shift.end ? dateTime(shift.end, report.settings.timezone) : ar.shiftOpen,
-      report.users.find((u) => u.id === shift.openedBy)?.username ?? '',
-      report.users.find((u) => u.id === shift.closedBy)?.username ?? '',
-      shift.end ? ar.shiftClosed : ar.shiftOpen,
-    ]);
-  rows.push(
-    [],
-    [ar.shift],
-    [
-      ar.from,
-      ar.to,
-      ar.play,
-      ar.services,
-      ar.discounts,
-      ar.expenses,
-      ar.net,
-      ar.unpaid,
-    ],
-  );
-  for (const shift of report.shifts) {
-    const t = totals(
-      report.sessions.filter((s) => s.shiftId === shift.id),
-      report.expenses.filter((e) => e.shiftId === shift.id),
-      report.generatedAt,
-    );
-    rows.push([
-      dateTime(shift.start, report.settings.timezone),
-      shift.end ? dateTime(shift.end, report.settings.timezone) : ar.shiftOpen,
-      t.play / 100,
-      t.services / 100,
-      t.discounts / 100,
-      t.expenses / 100,
-      t.net / 100,
-      t.unpaid / 100,
-    ]);
+export function shiftName(shift: Shift, allShifts: Shift[]): string {
+  const sameDay = allShifts
+    .filter((s) => s.date === shift.date)
+    .sort((a, b) => a.start - b.start);
+  return `${ar.shift} ${number(sameDay.findIndex((s) => s.id === shift.id) + 1)}`;
+}
+export function dateRangeShiftIds(
+  shifts: Shift[],
+  from: string,
+  to: string,
+): string[] {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(from) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(to) ||
+    from > to
+  )
+    throw new Error('invalid-date-range');
+  return shifts.filter((s) => s.date >= from && s.date <= to).map((s) => s.id);
+}
+function field(
+  label: string,
+  value: string | number,
+  format: ValueFormat = 'text',
+): ReportField {
+  return { label, value, format };
+}
+function metrics(report: Report, includeShiftCount: boolean): ReportField[] {
+  const result = (
+    ['play', 'services', 'discounts', 'expenses', 'net'] as const
+  ).map((key) => field(ar[key], report.totals[key], 'money'));
+  if (includeShiftCount)
+    result.push(field(ar.shiftCount, report.shifts.length, 'number'));
+  else if (report.totals.unpaid)
+    result.push(field(ar.unpaid, report.totals.unpaid, 'money'));
+  return result;
+}
+export function buildReportDocument(
+  report: Report,
+  kind: ReportKind,
+  allShifts: Shift[] = report.shifts,
+): ReportDocument {
+  const shift = report.shifts[0];
+  const closed = kind === 'shift' && !!shift?.end;
+  const doc: ReportDocument = {
+    kind,
+    title:
+      kind === 'totals'
+        ? ar.totalsReport
+        : kind === 'shifts'
+          ? ar.shiftsReport
+          : closed
+            ? ar.closingReport
+            : ar.liveShiftReport,
+    period: report.period,
+    generatedAt: report.generatedAt,
+    settings: report.settings,
+    notes: [],
+    blocks: [],
+    footer: [],
+  };
+  if (kind === 'totals') {
+    doc.blocks.push({ type: 'metrics', fields: metrics(report, true) });
+    return doc;
   }
-  rows.push(
-    [],
-    [ar.sessions],
-    [
-      ar.room,
-      ar.mode,
-      ar.from,
-      ar.to,
-      ar.billed,
-      ar.play,
-      ar.services,
-      ar.discount,
-      ar.total,
-      ar.paid,
-      ar.unpaid,
-      ar.status,
-    ],
-  );
-  for (const s of report.sessions.filter(
-    (s) => s.status === 'running' || s.status === 'finished',
-  )) {
-    const b = reportBill(s, report.generatedAt);
-    rows.push([
-      s.roomName,
-      ar[s.mode],
-      dateTime(s.start, s.timezone),
-      s.end ? dateTime(s.end, s.timezone) : ar.running,
-      b.billedMinutes,
-      b.play / 100,
-      b.services / 100,
-      b.discount / 100,
-      b.total / 100,
-      b.paid / 100,
-      b.unpaid / 100,
-      ar[s.status],
-    ]);
-  }
-  rows.push(
-    [],
-    [ar.auditSessions],
-    [ar.room, ar.status, ar.from, ar.to, ar.reason, ar.total],
-  );
-  for (const s of report.sessions.filter(
-    (s) => s.status === 'cancelled' || s.status === 'voided',
-  ))
-    rows.push([
-      s.roomName,
-      ar[s.status],
-      dateTime(s.start, s.timezone),
-      s.end ? dateTime(s.end, s.timezone) : '',
-      s.reason ?? '',
-      s.status === 'cancelled' ? 0 : (s.bill?.total ?? 0) / 100,
-    ]);
-  rows.push(
-    [],
-    [ar.roomSummary],
-    [
-      ar.room,
-      ar.count,
-      ar.period,
-      ar.play,
-      ar.services,
-      ar.discounts,
-      ar.total,
-    ],
-  );
-  for (const id of new Set([
-    ...(report.rooms ?? []).filter((r) => r.active).map((r) => r.id),
-    ...report.sessions.map((s) => s.roomId),
-  ])) {
-    const ss = report.sessions.filter((s) => s.roomId === id);
-    const t = totals(ss, [], report.generatedAt);
-    rows.push([
-      ss[0]?.roomName ?? report.rooms.find((r) => r.id === id)!.name,
-      t.count,
-      ss
-        .map(
-          (s) =>
-            `${dateTime(s.start)} - ${s.end ? dateTime(s.end, s.timezone) : ar.running}`,
-        )
-        .join(' / '),
-      t.play / 100,
-      t.services / 100,
-      t.discounts / 100,
-      (t.play + t.services - t.discounts) / 100,
-    ]);
-  }
-  rows.push([], [ar.servicesSold], [ar.name, ar.quantity, ar.amount]);
-  const sold = new Map<string, { quantity: number; amount: number }>();
-  for (const s of report.sessions.filter((s) => s.status === 'finished'))
-    for (const l of s.services) {
-      const prev = sold.get(l.name) ?? { quantity: 0, amount: 0 };
-      sold.set(l.name, {
-        quantity: prev.quantity + l.quantity,
-        amount: prev.amount + l.price * l.quantity,
+  if (kind === 'shifts') {
+    if (report.shifts.length)
+      doc.blocks.push({
+        type: 'table',
+        columns: [
+          { label: ar.name, format: 'text' },
+          { label: ar.from, format: 'text' },
+          { label: ar.to, format: 'text' },
+          { label: ar.revenue, format: 'money' },
+          { label: ar.net, format: 'money' },
+        ],
+        rows: report.shifts.map((s) => {
+          const t = totals(
+            report.sessions.filter((x) => x.shiftId === s.id),
+            report.expenses.filter((e) => e.shiftId === s.id),
+            report.generatedAt,
+          );
+          return [
+            shiftName(s, allShifts),
+            timeOfDay(s.start, report.settings.timezone),
+            s.end
+              ? dayKey(s.end, report.settings.timezone) === s.date
+                ? timeOfDay(s.end, report.settings.timezone)
+                : dateTime(s.end, report.settings.timezone)
+              : ar.running,
+            t.play + t.services - t.discounts,
+            t.net,
+          ];
+        }),
       });
+    return doc;
+  }
+  if (!shift) return doc;
+  doc.period = `${shiftName(shift, allShifts)} · ${shift.date}`;
+  doc.notes.push(
+    closed
+      ? ar.finalShiftHint
+      : report.sessions.some((s) => s.status === 'running')
+        ? ar.liveShiftHint
+        : ar.liveReportHint,
+  );
+  const opener = report.users.find((u) => u.id === shift.openedBy)?.username;
+  if (opener) doc.notes.push(`${ar.openedBy}: ${opener}`);
+  doc.blocks.push({ type: 'metrics', fields: metrics(report, false) });
+  for (const [index, s] of [...report.sessions]
+    .sort((a, b) => a.start - b.start)
+    .entries()) {
+    const active = s.status === 'running' || s.status === 'finished';
+    const b = reportBill(s, report.generatedAt);
+    const fields: ReportField[] = [
+      field(ar.status, s.status === 'running' ? ar.running : ar[s.status]),
+      field(ar.mode, ar[s.mode]),
+      field(ar.from, dateTime(s.start, s.timezone)),
+      field(ar.to, s.end ? dateTime(s.end, s.timezone) : ar.running),
+    ];
+    if (active) {
+      fields.push(
+        field(ar.billedMinutesLabel, b.billedMinutes, 'number'),
+        field(ar.play, b.play, 'money'),
+      );
+      if (b.services) fields.push(field(ar.services, b.services, 'money'));
+      if (b.discount) fields.push(field(ar.discount, b.discount, 'money'));
+      if (s.discount?.reason)
+        fields.push(field(ar.discountReason, s.discount.reason));
+      fields.push(field(ar.total, b.total, 'money'));
+      if (s.status === 'finished') {
+        fields.push(field(ar.paid, b.paid, 'money'));
+        if (b.change) fields.push(field(ar.change, b.change, 'money'));
+        if (b.unpaid) fields.push(field(ar.unpaid, b.unpaid, 'money'));
+      }
+      if (s.services.length)
+        fields.push(
+          field(
+            ar.serviceDetails,
+            s.services
+              .map((l) => `${l.name} × ${number(l.quantity)}`)
+              .join('، '),
+          ),
+        );
+    } else fields.push(field(ar.total, 0, 'money'));
+    if (s.reason) fields.push(field(ar.reason, s.reason));
+    if (s.note) fields.push(field(ar.note, s.note));
+    doc.blocks.push({
+      type: 'session',
+      id: s.id,
+      status: s.status,
+      title: `${ar.session} ${number(index + 1)} · ${s.roomName}`,
+      fields,
+    });
+  }
+  if (closed) {
+    const closer = report.users.find((u) => u.id === shift.closedBy)?.username;
+    if (closer) doc.footer.push(field(ar.closedBy, closer));
+  }
+  return doc;
+}
+export function reportRows(doc: ReportDocument): ExportRow[] {
+  const rows: ExportRow[] = [
+    { cells: [doc.settings.shopName], style: 'heading' },
+    { cells: [doc.title, doc.period], style: 'heading' },
+    { cells: [ar.device, doc.settings.device], style: 'body' },
+    {
+      cells: [ar.generated, dateTime(doc.generatedAt, doc.settings.timezone)],
+      style: 'body',
+    },
+  ];
+  for (const note of doc.notes) rows.push({ cells: [note], style: 'body' });
+  const exportValue = (f: ReportField) =>
+    f.format === 'money' ? Number(f.value) / 100 : f.value;
+  for (const block of doc.blocks) {
+    rows.push({ cells: [], style: 'body' });
+    if (block.type === 'table') {
+      rows.push({ cells: [ar.currency, doc.settings.currency], style: 'body' });
+      rows.push({ cells: block.columns.map((c) => c.label), style: 'header' });
+      for (const row of block.rows)
+        rows.push({
+          cells: row.map((value, i) =>
+            block.columns[i].format === 'money' ? Number(value) / 100 : value,
+          ),
+          formats: block.columns.map((c) => c.format),
+          style: 'body',
+        });
+    } else {
+      if (block.type === 'session')
+        rows.push({ cells: [block.title], style: 'heading' });
+      for (const f of block.fields)
+        rows.push({
+          cells: [f.label, exportValue(f)],
+          formats: ['text', f.format],
+          style: 'body',
+        });
     }
-  for (const [name, x] of sold) rows.push([name, x.quantity, x.amount / 100]);
-  rows.push([], [ar.discounts], [ar.room, ar.discount, ar.reason]);
-  for (const s of report.sessions.filter(
-    (s) => s.status === 'finished' && s.bill?.discount,
-  ))
-    rows.push([s.roomName, s.bill!.discount / 100, s.discount?.reason ?? '']);
-  rows.push(
-    [],
-    [ar.expenses],
-    [ar.description, ar.category, ar.amount, ar.status],
-  );
-  for (const e of report.expenses)
-    rows.push([
-      e.description,
-      e.category,
-      e.amount / 100,
-      e.voided ? ar.voided : ar.active,
-    ]);
-  rows.push([], [ar.expenseSummary], [ar.category, ar.amount]);
-  for (const c of new Set(report.expenses.map((e) => e.category)))
-    rows.push([
-      c,
-      report.expenses
-        .filter((e) => e.category === c && !e.voided)
-        .reduce((n, e) => n + e.amount, 0) / 100,
-    ]);
-  rows.push(
-    [],
-    [ar.total],
-    [ar.count, report.totals.count],
-    [ar.cancelled, report.totals.cancelled],
-    [ar.voided, report.totals.voided],
-  );
-  for (const [label, key] of [
-    [ar.play, 'play'],
-    [ar.services, 'services'],
-    [ar.discounts, 'discounts'],
-    [ar.expenses, 'expenses'],
-    [ar.net, 'net'],
-    [ar.unpaid, 'unpaid'],
-  ] as const)
-    rows.push([label, report.totals[key] / 100]);
-  rows.push([
-    ar.signature,
-    report.shifts
-      .map((s) => report.users.find((u) => u.id === s.closedBy)?.username ?? '')
-      .join(' / '),
-  ]);
+  }
+  for (const f of doc.footer)
+    rows.push({
+      cells: [f.label, exportValue(f)],
+      formats: ['text', f.format],
+      style: 'body',
+    });
   return rows;
 }

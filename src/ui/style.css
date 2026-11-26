@@ -1174,3 +1174,279 @@ dialog::backdrop {
 .check {
   min-height: 44px;
 }
+
+/* Report documents share their ordered blocks with Excel exports. */
+.simple-report {
+  overflow: visible;
+  padding: 28px;
+  color: #17253b;
+}
+.simple-report .report-header h3 {
+  font-size: 1.4rem;
+}
+.simple-report .report-note {
+  font-size: 1rem;
+  color: #485a73;
+  margin-bottom: 14px;
+}
+.simple-report .report-totals {
+  margin: 22px 0;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.simple-report .report-totals > div {
+  background: #eef2f9;
+  border: 1px solid #c8d3e4;
+  border-radius: 14px;
+  padding: 18px;
+}
+.simple-report dt {
+  font-size: 1rem;
+  color: #4b5c74;
+}
+.simple-report dd {
+  margin: 8px 0 0;
+  font-size: 1.55rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.report-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #cad4e3;
+  border-radius: 12px;
+}
+.shift-list-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 740px;
+  text-align: right;
+  font-size: 1rem;
+}
+.shift-list-table th {
+  background: #e7edf7;
+  font-weight: 700;
+}
+.shift-list-table th,
+.shift-list-table td {
+  padding: 18px 16px;
+  border-bottom: 1px solid #ccd6e5;
+  white-space: nowrap;
+}
+.shift-list-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.session-report-card {
+  margin-top: 24px;
+  border: 1px solid #c4cede;
+  border-radius: 14px;
+  overflow: hidden;
+  break-inside: avoid;
+}
+.session-report-card h3 {
+  background: #e5ecf6;
+  color: #1e304c;
+  margin: 0;
+  padding: 18px;
+  font-size: 1.15rem;
+}
+.session-report-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 6px 20px 16px;
+}
+.session-report-card dl > div {
+  padding: 14px 10px;
+  border-bottom: 1px solid #d4dce8;
+  min-width: 0;
+}
+.session-report-card dt {
+  font-size: 0.98rem;
+}
+.session-report-card dd {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 5px 0 0;
+}
+.session-report-card .session-total {
+  background: #edf4e8;
+  border-radius: 9px;
+}
+.session-report-card .actions {
+  padding: 0 20px 16px;
+}
+.session-report-card button {
+  background: #e1e9f5;
+  color: #203453;
+  border-color: #b8c8dd;
+}
+.report-signature {
+  border-top: 2px solid #bdcadd;
+  margin-top: 24px;
+  padding-top: 18px;
+  font-size: 1.1rem;
+}
+.report-tabs button {
+  font-size: 1rem;
+  min-height: 58px;
+}
+@media (max-width: 680px) {
+  .simple-report {
+    padding: 20px 16px;
+  }
+  .report-tabs button {
+    font-size: 0.86rem;
+    padding: 10px 5px;
+    line-height: 1.7;
+  }
+  .simple-report .report-header h3 {
+    font-size: 1.15rem;
+  }
+  .simple-report .report-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .simple-report .report-totals > div {
+    padding: 14px 12px;
+  }
+  .simple-report .report-totals dd {
+    font-size: 1.3rem;
+  }
+  .simple-report .report-totals dt {
+    font-size: 0.9rem;
+  }
+  .session-report-card dl {
+    padding: 4px 10px 12px;
+  }
+  .session-report-card dl > div {
+    padding: 12px 8px;
+  }
+  .session-report-card dd {
+    font-size: 1.05rem;
+  }
+  .simple-report .report-note {
+    font-size: 0.95rem;
+  }
+}
+@page {
+  size: A4 portrait;
+  margin: 14mm;
+}
+@media print {
+  .simple-report {
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    background: white;
+  }
+  .simple-report .report-header h2 {
+    font-size: 20pt;
+  }
+  .simple-report .report-header h3 {
+    font-size: 17pt;
+  }
+  .simple-report .report-header p,
+  .simple-report .report-header small {
+    font-size: 11pt;
+  }
+  .simple-report .report-note {
+    font-size: 11pt;
+  }
+  .simple-report .report-totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .simple-report .report-totals > div {
+    padding: 12px;
+    break-inside: avoid;
+    print-color-adjust: exact;
+  }
+  .simple-report .report-totals dt {
+    font-size: 11pt;
+  }
+  .simple-report .report-totals dd {
+    font-size: 17pt;
+  }
+  .report-table-scroll {
+    overflow: visible;
+    border: 0;
+  }
+  .shift-list-table {
+    min-width: 0;
+    width: 100%;
+    font-size: 11pt;
+    table-layout: fixed;
+  }
+  .shift-list-table th,
+  .shift-list-table td {
+    padding: 10px 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .shift-list-table tr {
+    break-inside: avoid;
+  }
+  .shift-list-table thead {
+    display: table-header-group;
+  }
+  .session-report-card {
+    margin-top: 18px;
+    break-inside: avoid;
+    box-decoration-break: clone;
+  }
+  .session-report-card h3 {
+    font-size: 14pt;
+    padding: 12px;
+    print-color-adjust: exact;
+  }
+  .session-report-card dt {
+    font-size: 11pt;
+  }
+  .session-report-card dd {
+    font-size: 13pt;
+  }
+  .session-report-card dl > div {
+    padding: 10px 8px;
+  }
+  .report-signature {
+    font-size: 12pt;
+    break-inside: avoid;
+  }
+}
+
+.shift-list-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.shift-list-table th,
+.shift-list-table td {
+  padding: 16px 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.shift-list-table caption {
+  caption-side: top;
+  text-align: right;
+  padding: 12px;
+  font-size: 0.9rem;
+  color: #4b5c74;
+  background: #f1f4fa;
+}
+@media (max-width: 680px) {
+  .report-controls .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .report-controls input[type='date'] {
+    padding: 9px 6px;
+  }
+  .shift-list-table {
+    font-size: 0.95rem;
+  }
+  .shift-list-table th,
+  .shift-list-table td {
+    padding: 14px 3px;
+  }
+}

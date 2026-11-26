@@ -21,3 +21,7 @@ Relative Vite base and HashRouter support repository hosting. Workbox precaches 
 ## Validation
 
 Typecheck, ESLint, Vitest, build and Playwright run in CI. The browser flow covers setup/recovery, running timer reload, services, discount/payment/change, expense, closing report, Excel download, backup and offline reload. It collects mobile screenshots and a browser-printed Arabic sample PDF. Unit tests cover every rounding boundary, money modes, totals, permissions, backup rejection/migration and persistence; React tests guard recovery acknowledgement.
+
+## Report presentation
+
+`src/core/reports.ts` builds an ordered ReportDocument with metrics, a five-column table or per-session field blocks. The three report screens, HTML/PDF and Excel consume the same blocks in the same order. Data-range selection is inclusive by shift opening date. This presentation is built on demand from existing live or frozen Report data; backup/schema versions remain unchanged. Closed snapshots are never rewritten for a layout change.

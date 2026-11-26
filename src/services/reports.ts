@@ -1,11 +1,10 @@
 import { can } from '../core/logic';
 import { currentUser } from './store';
-import type { Report } from '../core/model';
+import type { ReportDocument } from '../core/reports';
 import { ar } from '../i18n/ar';
 import { reportRows } from '../core/reports';
-export { reportRows, reportBill } from '../core/reports';
 import { fileSaver, safeFilename } from './platform';
-export async function exportExcel(report: Report) {
+export async function exportExcel(report: ReportDocument) {
   if (!can(currentUser(), 'exportReports')) throw new Error('denied');
   const ExcelJS = await import('exceljs');
   const workbook = new ExcelJS.default.Workbook();
@@ -15,37 +14,39 @@ export async function exportExcel(report: Report) {
   });
   const rows = reportRows(report);
   for (const row of rows) {
-    const added = sheet.addRow(row);
+    const added = sheet.addRow(row.cells);
     added.alignment = {
       vertical: 'middle',
       horizontal: 'right',
       wrapText: true,
     };
-    if (
-      row.length === 1 ||
-      row[0] === ar.room ||
-      row[0] === ar.description ||
-      row[0] === ar.category ||
-      row[0] === ar.name
-    ) {
-      added.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    added.font = { name: 'Arial', size: 16 };
+    if (row.style === 'heading' || row.style === 'header') {
+      added.font = {
+        name: 'Arial',
+        size: 17,
+        bold: true,
+        color: { argb: 'FFFFFFFF' },
+      };
       added.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: 'FF243558' },
       };
     }
-    added.height = 30;
-    added.eachCell((cell) => {
-      if (typeof cell.value === 'number') cell.numFmt = '0.00';
+    added.height = row.style === 'heading' ? 46 : 40;
+    added.eachCell((cell, index) => {
+      if (typeof cell.value === 'number')
+        cell.numFmt = row.formats?.[index - 1] === 'money' ? '#,##0.00' : '0';
     });
   }
-  sheet.columns = Array.from({ length: 12 }, (_, i) => ({
-    width: i === 0 ? 30 : i === 2 || i === 3 ? 28 : 18,
+  const columnCount = Math.max(3, ...rows.map((row) => row.cells.length));
+  sheet.columns = Array.from({ length: columnCount }, (_, i) => ({
+    width: i === 0 ? 34 : i === 1 ? 44 : 26,
   }));
   sheet.pageSetup = {
     paperSize: 9,
-    orientation: 'landscape',
+    orientation: report.kind === 'shifts' ? 'landscape' : 'portrait',
     fitToPage: true,
     fitToWidth: 1,
     fitToHeight: 0,
@@ -69,7 +70,7 @@ export async function exportExcel(report: Report) {
       extension,
     });
     sheet.addImage(image, {
-      tl: { col: 10, row: 0 },
+      tl: { col: columnCount - 1, row: 0 },
       ext: { width: 60, height: 60 },
     });
   }
